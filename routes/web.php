@@ -26,6 +26,9 @@ Route::get('courses/{course}/measure', [MeasurementController::class, 'index'])
 Route::get('courses/{course}/holes/{hole}/measure', [MeasurementController::class, 'measureHole'])
     ->name('holes.measure');
 
+Route::post('courses/{course}/holes/{hole}/geometry', [MeasurementController::class, 'saveHoleGeometry'])
+    ->name('holes.geometry.save');
+
 // Drive Routes
 Route::post('drives', [MeasurementController::class, 'storeDrive'])
     ->name('drives.store');

@@ -146,17 +146,30 @@ class GolfCourseController extends Controller
     public function saveOverlayConfig(Request $request, GolfCourse $course)
     {
         $validated = $request->validate([
-            'rotation' => 'required|numeric',
-            'scaleX' => 'required|numeric',
-            'scaleY' => 'required|numeric',
-            'offsetX' => 'required|numeric',
-            'offsetY' => 'required|numeric',
-            'bounds' => 'required|array',
-            'opacity' => 'required|numeric|between:0,1',
+            'rotation' => 'nullable|numeric',
+            'scaleX' => 'nullable|numeric',
+            'scaleY' => 'nullable|numeric',
+            'offsetX' => 'nullable|numeric',
+            'offsetY' => 'nullable|numeric',
+            'bounds' => 'nullable|array',
+            'opacity' => 'nullable|numeric|between:0,1',
+            'calibration' => 'nullable|array',
+            'calibration.zoom' => 'nullable|integer',
+            'calibration.H' => 'nullable|array|size:9',
+            'calibration.points' => 'nullable|array|size:4',
+            'calibration.points.*.img' => 'required_with:calibration.points|array',
+            'calibration.points.*.img.u' => 'required_with:calibration.points|numeric',
+            'calibration.points.*.img.v' => 'required_with:calibration.points|numeric',
+            'calibration.points.*.map' => 'required_with:calibration.points|array',
+            'calibration.points.*.map.lat' => 'required_with:calibration.points|numeric|between:-90,90',
+            'calibration.points.*.map.lng' => 'required_with:calibration.points|numeric|between:-180,180',
         ]);
 
+        $existing = is_array($course->overlay_config) ? $course->overlay_config : [];
+        $merged = array_merge($existing, array_filter($validated, fn ($v) => $v !== null));
+
         $course->update([
-            'overlay_config' => $validated,
+            'overlay_config' => $merged,
         ]);
 
         return response()->json([

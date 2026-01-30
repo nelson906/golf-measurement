@@ -16,12 +16,18 @@ class Hole extends Model
         'hole_number',
         'par',
         'length_yards',
+        'tee_points',
+        'green_point',
+        'centerline',
     ];
 
     protected $casts = [
         'hole_number' => 'integer',
         'par' => 'integer',
         'length_yards' => 'integer',
+        'tee_points' => 'array',
+        'green_point' => 'array',
+        'centerline' => 'array',
     ];
 
     /**

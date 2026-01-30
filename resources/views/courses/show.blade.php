@@ -297,7 +297,7 @@
 
         // Vai a misurazione buca
         function measureHole(courseId, holeNumber) {
-            window.location.href = `/courses/${courseId}/holes/${holeNumber}/measure`;
+            window.location.href = `{{ url('courses/'.$course->id.'/holes') }}/${holeNumber}/measure`;
         }
     </script>
 </body>

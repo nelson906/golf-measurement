@@ -22,14 +22,54 @@ class MeasurementController extends Controller
     /**
      * Interfaccia misurazione buca
      */
-    public function measureHole(GolfCourse $course, $holeNumber)
+    public function measureHole(GolfCourse $course, int $holeNumber)
     {
-        $hole = $course->holes()->where('hole_number', $holeNumber)->firstOrFail();
+        $hole = Hole::query()
+            ->where('golf_course_id', $course->id)
+            ->where('hole_number', $holeNumber)
+            ->firstOrFail();
 
         // Carica drive esistenti per questa buca
         $hole->load(['drives.measurements', 'drives.user']);
 
         return view('measurements.measure', compact('course', 'hole'));
+    }
+
+    /**
+     * Salva geometria buca (tee/green/centerline)
+     */
+    public function saveHoleGeometry(Request $request, GolfCourse $course, int $holeNumber)
+    {
+        $hole = Hole::query()
+            ->where('golf_course_id', $course->id)
+            ->where('hole_number', $holeNumber)
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'tee_points' => 'nullable|array',
+            'tee_points.yellow.lat' => 'nullable|numeric|between:-90,90',
+            'tee_points.yellow.lng' => 'nullable|numeric|between:-180,180',
+            'tee_points.red.lat' => 'nullable|numeric|between:-90,90',
+            'tee_points.red.lng' => 'nullable|numeric|between:-180,180',
+            'green_point' => 'nullable|array',
+            'green_point.lat' => 'nullable|numeric|between:-90,90',
+            'green_point.lng' => 'nullable|numeric|between:-180,180',
+            'centerline' => 'nullable|array',
+            'centerline.*.lat' => 'required_with:centerline|numeric|between:-90,90',
+            'centerline.*.lng' => 'required_with:centerline|numeric|between:-180,180',
+        ]);
+
+        $hole->update([
+            'tee_points' => $validated['tee_points'] ?? null,
+            'green_point' => $validated['green_point'] ?? null,
+            'centerline' => $validated['centerline'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'hole' => $hole->fresh(),
+            'message' => 'Geometria buca salvata!',
+        ]);
     }
 
     /**
