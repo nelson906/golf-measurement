@@ -120,7 +120,46 @@
             font-size: 12px;
             border-radius: 6px;
         }
-        #map-panel-body { position: relative; width: 100%; height: calc(100% - 41px); overflow: hidden; }
+        #map-panel-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            background: rgba(30,30,30,0.95);
+            border-bottom: 1px solid #333;
+            font-size: 11px;
+            color: #bbb;
+        }
+        #map-panel-controls label { margin: 0; white-space: nowrap; }
+        #map-panel-controls input[type="range"] { width: 80px; margin: 0; }
+        #map-panel-controls .rotation-value {
+            background: #444;
+            padding: 2px 6px;
+            border-radius: 3px;
+            min-width: 35px;
+            text-align: center;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        #map-panel-controls button {
+            padding: 4px 8px;
+            font-size: 10px;
+        }
+        .hole-indicator {
+            position: absolute;
+            background: rgba(255, 152, 0, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .hole-indicator.active { display: block; }
+        #map-panel-body { position: relative; width: 100%; height: calc(100% - 70px); overflow: hidden; }
         #ref-map-viewport { position:absolute; left:0; top:0; width:100%; height:100%; transform-origin: 0 0; cursor: grab; }
         #ref-map-viewport.dragging { cursor: grabbing; }
         #ref-map-img { width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; pointer-events: none; }
@@ -252,17 +291,28 @@
             <div id="map">
                 <div id="map-panel">
                     <div id="map-panel-header">
-                        <span>Mappetta (clicca per digitizzare)</span>
+                        <span>🗺️ Mappetta Riferimento - Buca <strong id="current-hole-display">{{ $hole->hole_number }}</strong></span>
                         <div style="display:flex;gap:8px;align-items:center;">
                             <button class="secondary" onclick="toggleMapPanelSize()" style="margin:0;">⤢</button>
                             <button class="danger" onclick="toggleMapPanel()" style="margin:0;">✕</button>
                         </div>
+                    </div>
+                    <div id="map-panel-controls">
+                        <label>🔄 Rotazione:</label>
+                        <input type="range" id="map-rotation" min="0" max="360" value="0" oninput="updateMapRotation(this.value)">
+                        <span class="rotation-value" id="rotation-value">0°</span>
+                        <button class="secondary" onclick="setMapRotation(0)" style="margin:0;">Reset</button>
+                        <span style="margin-left: 10px; color: #888;">|</span>
+                        <label>🔍 Zoom:</label>
+                        <input type="range" id="map-zoom-ctrl" min="0.5" max="3" step="0.1" value="1" oninput="updateMapZoom(this.value)">
+                        <button class="secondary" onclick="resetMapView()" style="margin:0;">Centra</button>
                     </div>
                     <div id="map-panel-body">
                         <div id="ref-map-viewport">
                             <img id="ref-map-img" alt="Mappa riferimento" />
                             <canvas id="ref-map-canvas"></canvas>
                         </div>
+                        <div class="hole-indicator" id="hole-indicator"></div>
                     </div>
                 </div>
 
@@ -324,6 +374,7 @@ let mapPanelEnlarged=false;
 let calib={active:false,stage:'idle',zoom:18,points:[],H:null};
 let mapDraw={mode:null,drawing:false};
 let calibMapMarkers=[];
+let mapRotation=0; // Rotazione della mappetta in gradi
 
 // Init mappa - SOLO SATELLITARE
 map=L.map('map',{zoomControl:true}).setView(CENTER,16);
@@ -600,7 +651,38 @@ function getRefPixelFromEvent(ev){
 
 function applyRefViewportTransform(){
     const vp=document.getElementById('ref-map-viewport');
-    vp.style.transform=`translate(${refView.tx}px,${refView.ty}px) scale(${refView.scale})`;
+    vp.style.transformOrigin='center center';
+    vp.style.transform=`translate(${refView.tx}px,${refView.ty}px) scale(${refView.scale}) rotate(${mapRotation}deg)`;
+}
+
+// === Controlli Rotazione e Zoom Mappetta ===
+function updateMapRotation(value){
+    mapRotation=parseInt(value,10);
+    document.getElementById('rotation-value').textContent=mapRotation+'°';
+    applyRefViewportTransform();
+}
+
+function setMapRotation(value){
+    mapRotation=parseInt(value,10);
+    document.getElementById('map-rotation').value=mapRotation;
+    document.getElementById('rotation-value').textContent=mapRotation+'°';
+    applyRefViewportTransform();
+}
+
+function updateMapZoom(value){
+    refView.scale=parseFloat(value);
+    applyRefViewportTransform();
+}
+
+function resetMapView(){
+    refView.scale=1;
+    refView.tx=0;
+    refView.ty=0;
+    mapRotation=0;
+    document.getElementById('map-rotation').value=0;
+    document.getElementById('rotation-value').textContent='0°';
+    document.getElementById('map-zoom-ctrl').value=1;
+    applyRefViewportTransform();
 }
 
 function initRefViewportInteractions(){
@@ -721,6 +803,10 @@ function startCalibration(){
     if(!MAP_URL){
         alert('Carica una mappetta per calibrare');
         return;
+    }
+    // Reset rotazione per calibrazione precisa
+    if(mapRotation !== 0){
+        setMapRotation(0);
     }
     clearCalibrationMarkers();
     calib={active:true,stage:'await_img',zoom:Math.max(16,map.getZoom()),points:[],H:null};
@@ -918,6 +1004,13 @@ function applyHomography(H,u,v){
 
 function handleMapDigitizeClick(p){
     if(!p.valid) return;
+    // Avvisa se la mappetta è ruotata - la digitizzazione richiede rotazione 0
+    if(mapRotation !== 0){
+        if(!confirm('La mappetta è ruotata di '+mapRotation+'°.\nPer digitizzare correttamente, la rotazione deve essere 0°.\n\nVuoi resettare la rotazione e continuare?')){
+            return;
+        }
+        setMapRotation(0);
+    }
     if(!SAVED_CONFIG?.calibration?.H && !calib.H){
         alert('Calibra prima la mappetta (4 punti)');
         return;

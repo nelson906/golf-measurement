@@ -19,6 +19,10 @@ Route::post('courses/{course}/upload-map', [GolfCourseController::class, 'upload
 Route::post('courses/{course}/save-overlay-config', [GolfCourseController::class, 'saveOverlayConfig'])
     ->name('courses.save-overlay-config');
 
+// Importa mappa da URL
+Route::post('courses/{course}/import-map-url', [GolfCourseController::class, 'importMapFromUrl'])
+    ->name('courses.import-map-url');
+
 // Measurement Routes
 Route::get('courses/{course}/measure', [MeasurementController::class, 'index'])
     ->name('courses.measure');

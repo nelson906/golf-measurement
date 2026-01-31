@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\GolfCourse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class GolfCourseController extends Controller
 {
@@ -138,6 +140,84 @@ class GolfCourseController extends Controller
             'message' => 'Mappa caricata con successo!',
             'path' => Storage::url($path),
         ]);
+    }
+
+    /**
+     * Importa mappa da URL esterno
+     */
+    public function importMapFromUrl(Request $request, GolfCourse $course)
+    {
+        $validated = $request->validate([
+            'url' => 'required|url',
+        ]);
+
+        $url = $validated['url'];
+
+        try {
+            // Scarica l'immagine
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept' => 'image/*,*/*',
+                ])
+                ->get($url);
+
+            if (!$response->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Impossibile scaricare l\'immagine (HTTP ' . $response->status() . ')',
+                ], 400);
+            }
+
+            $content = $response->body();
+            $contentType = $response->header('Content-Type');
+
+            // Verifica che sia un'immagine
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $mimeType = $finfo->buffer($content);
+
+            $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!in_array($mimeType, $allowedMimes)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Il file non è un\'immagine valida (tipo: ' . $mimeType . ')',
+                ], 400);
+            }
+
+            // Determina estensione
+            $extensions = [
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp',
+            ];
+            $extension = $extensions[$mimeType] ?? 'jpg';
+
+            // Elimina vecchia mappa se esiste
+            if ($course->map_image_path) {
+                Storage::disk('public')->delete($course->map_image_path);
+            }
+
+            // Salva nuova mappa
+            $filename = 'course-maps/' . Str::slug($course->name) . '-' . time() . '.' . $extension;
+            Storage::disk('public')->put($filename, $content);
+
+            $course->update([
+                'map_image_path' => $filename,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Mappa importata con successo!',
+                'path' => Storage::url($filename),
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Errore durante l\'importazione: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
