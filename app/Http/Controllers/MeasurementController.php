@@ -206,6 +206,34 @@ class MeasurementController extends Controller
     }
 
     /**
+     * Salva posizione tee o green di una buca
+     */
+    public function saveHolePosition(Request $request, Hole $hole)
+    {
+        $validated = $request->validate([
+            'type' => 'required|in:tee,green',
+            'lat' => 'required|numeric|between:-90,90',
+            'lng' => 'required|numeric|between:-180,180',
+        ]);
+
+        $position = ['lat' => $validated['lat'], 'lng' => $validated['lng']];
+
+        if ($validated['type'] === 'tee') {
+            $teePoints = $hole->tee_points ?? [];
+            $teePoints['yellow'] = $position;
+            $hole->update(['tee_points' => $teePoints]);
+        } else {
+            $hole->update(['green_point' => $position]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'hole' => $hole->fresh(),
+            'message' => ucfirst($validated['type']) . ' salvato!',
+        ]);
+    }
+
+    /**
      * Calcola par suggerito in base alla distanza
      */
     private function calculatePar(float $meters): int

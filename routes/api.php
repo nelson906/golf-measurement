@@ -15,4 +15,8 @@ Route::prefix('drives')->group(function () {
 Route::prefix('measurements')->group(function () {
     Route::post('/', [MeasurementController::class, 'saveMeasurement']);
 });
+
+Route::prefix('holes')->group(function () {
+    Route::post('{hole}/position', [MeasurementController::class, 'saveHolePosition']);
+});
 ?>

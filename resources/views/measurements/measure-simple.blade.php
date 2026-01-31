@@ -444,23 +444,60 @@
             });
         }
 
+        // Linea tee-green (variabile globale per aggiornamento)
+        let teeGreenLine = null;
+
         // Mostra tee e green mappati
         function displayMappedPoints() {
             if (HOLE_DATA.tee) {
                 markers.tee = L.marker([HOLE_DATA.tee.lat, HOLE_DATA.tee.lng], {
-                    icon: makeIcon('#FFC107', 'T', 32)
-                }).addTo(map).bindPopup('Tee Buca ' + HOLE_NUMBER);
+                    icon: makeIcon('#FFC107', 'T', 32),
+                    draggable: true
+                }).addTo(map).bindPopup('Tee Buca ' + HOLE_NUMBER + ' (trascinabile)');
+
+                markers.tee.on('dragend', function(e) {
+                    const pos = e.target.getLatLng();
+                    HOLE_DATA.tee = { lat: pos.lat, lng: pos.lng };
+                    updateTeeGreenLine();
+                    saveTeeGreenPosition('tee', pos);
+                });
             }
 
             if (HOLE_DATA.green) {
                 markers.green = L.marker([HOLE_DATA.green.lat, HOLE_DATA.green.lng], {
-                    icon: makeIcon('#4CAF50', 'G', 32)
-                }).addTo(map).bindPopup('Green Buca ' + HOLE_NUMBER);
+                    icon: makeIcon('#4CAF50', 'G', 32),
+                    draggable: true
+                }).addTo(map).bindPopup('Green Buca ' + HOLE_NUMBER + ' (trascinabile)');
+
+                markers.green.on('dragend', function(e) {
+                    const pos = e.target.getLatLng();
+                    HOLE_DATA.green = { lat: pos.lat, lng: pos.lng };
+                    updateTeeGreenLine();
+                    saveTeeGreenPosition('green', pos);
+                });
             }
 
             // Linea tee-green
+            updateTeeGreenLine();
+
+            // Fit bounds
             if (HOLE_DATA.tee && HOLE_DATA.green) {
-                const line = L.polyline([
+                map.fitBounds([
+                    [HOLE_DATA.tee.lat, HOLE_DATA.tee.lng],
+                    [HOLE_DATA.green.lat, HOLE_DATA.green.lng]
+                ], { padding: [50, 50] });
+            }
+        }
+
+        function updateTeeGreenLine() {
+            // Rimuovi linea esistente
+            if (teeGreenLine) {
+                map.removeLayer(teeGreenLine);
+                teeGreenLine = null;
+            }
+
+            if (HOLE_DATA.tee && HOLE_DATA.green) {
+                teeGreenLine = L.polyline([
                     [HOLE_DATA.tee.lat, HOLE_DATA.tee.lng],
                     [HOLE_DATA.green.lat, HOLE_DATA.green.lng]
                 ], {
@@ -477,18 +514,34 @@
                 );
                 const yards = Math.round(dist / YD);
 
-                line.bindPopup(`Distanza Tee-Green: <strong>${yards} yards</strong>`);
+                teeGreenLine.bindPopup(`Distanza Tee-Green: <strong>${yards} yards</strong>`);
+                document.getElementById('hole-length').textContent = yards + ' yds';
+            }
+        }
 
-                // Aggiorna info se non c'è già
-                if (!HOLE_DATA.length) {
-                    document.getElementById('hole-length').textContent = yards + ' yds (calc)';
+        async function saveTeeGreenPosition(type, pos) {
+            try {
+                const response = await fetch(`/api/holes/{{ $hole->id }}/position`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': CSRF
+                    },
+                    body: JSON.stringify({
+                        type: type,
+                        lat: pos.lat,
+                        lng: pos.lng
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    setMode(`✅ ${type === 'tee' ? 'Tee' : 'Green'} salvato`);
+                    setTimeout(() => setMode(''), 2000);
                 }
-
-                // Fit bounds
-                map.fitBounds([
-                    [HOLE_DATA.tee.lat, HOLE_DATA.tee.lng],
-                    [HOLE_DATA.green.lat, HOLE_DATA.green.lng]
-                ], { padding: [50, 50] });
+            } catch (e) {
+                console.error('Errore salvataggio:', e);
+                setMode(`❌ Errore salvataggio ${type}`);
             }
         }
 
