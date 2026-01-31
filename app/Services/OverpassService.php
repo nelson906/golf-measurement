@@ -285,8 +285,8 @@ out skel qt;',
     /**
      * Pulisci la cache per un campo
      */
-    public function clearCache(float $lat, float $lng, float $radiusMeters = 2000): void
+    public function clearCache(float $lat, float $lng): void
     {
-        Cache::forget('osm_golf_holes_' . md5($lat . $lng . $radiusMeters));
+        Cache::forget('osm_golf_holes_' . md5($lat . $lng . '2000'));
     }
 }
