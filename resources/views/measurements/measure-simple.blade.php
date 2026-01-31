@@ -168,30 +168,6 @@
         }
         .hole-nav button { flex: 1; padding: 8px; font-size: 12px; }
 
-        /* Mappetta panel */
-        .ref-panel {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 280px;
-            background: rgba(0,0,0,0.9);
-            border: 2px solid #9C27B0;
-            border-radius: 10px;
-            overflow: hidden;
-            z-index: 1000;
-        }
-        .ref-panel.hidden { display: none; }
-        .ref-panel-header {
-            padding: 8px 12px;
-            background: #1a1a2e;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 11px;
-            color: #E1BEE7;
-        }
-        .ref-panel-header button { width: auto; padding: 4px 8px; margin: 0; }
-        .ref-panel img { width: 100%; display: block; }
     </style>
 </head>
 <body>
@@ -274,7 +250,7 @@
 
             <!-- Misure Fairway -->
             <div class="control-group">
-                <h2>📏 Misura Larghezza</h2>
+                <h2>📏 Misura Larghezza Fairway</h2>
 
                 <button class="btn-secondary" onclick="startWidthMeasure()" id="width-btn">
                     📏 Misura Larghezza Fairway
@@ -282,6 +258,81 @@
 
                 <div class="help-text">
                     Click su due punti opposti del fairway per misurare la larghezza
+                </div>
+
+                <div id="fairway-widths" style="margin-top: 10px;">
+                    <!-- Larghezze misurate verranno aggiunte qui -->
+                </div>
+            </div>
+
+            <!-- Distanza Laterale -->
+            <div class="control-group">
+                <h2>↔️ Distanza Laterale</h2>
+
+                <button class="btn-secondary" onclick="startLateralMeasure()" id="lateral-btn">
+                    ↔️ Misura Distanza Laterale
+                </button>
+
+                <div class="help-text">
+                    Click su due punti per misurare la distanza laterale (es. da linea di gioco a ostacolo)
+                </div>
+
+                <div id="lateral-distances" style="margin-top: 10px;">
+                    <!-- Distanze laterali misurate verranno aggiunte qui -->
+                </div>
+            </div>
+
+            <!-- Bunker -->
+            <div class="control-group">
+                <h2>🏖️ Bunker</h2>
+
+                <div class="inline">
+                    <label>N° Bunker in Fairway:</label>
+                    <input type="number" id="bunker-count" value="0" min="0" max="20" style="width: 60px;">
+                </div>
+
+                <div class="inline" style="margin-top: 8px;">
+                    <label>Bunker Fraction:</label>
+                    <select id="bunker-fraction" style="padding: 8px; background: #0f3460; border: 1px solid #1a1a2e; color: white; border-radius: 4px; font-size: 13px;">
+                        <option value="">(nessuno)</option>
+                        <option value="> 0 to ¼">&gt; 0 to ¼</option>
+                        <option value="> ¼ to ½">&gt; ¼ to ½</option>
+                        <option value="> ½ to ¾">&gt; ½ to ¾</option>
+                        <option value="> ¾">&gt; ¾</option>
+                    </select>
+                </div>
+
+                <div class="help-text">
+                    Bunker Fraction: frazione area landing zone coperta da bunker (USGA)
+                </div>
+            </div>
+
+            <!-- Lunghezza Colpi (ShotLength) -->
+            <div class="control-group">
+                <h2>🎯 Lunghezza Colpi (ShotLength)</h2>
+
+                <div class="inline">
+                    <label>Genere:</label>
+                    <select id="shot-gender" style="padding: 8px; background: #0f3460; border: 1px solid #1a1a2e; color: white; border-radius: 4px; font-size: 13px;" onchange="updateShotLengthDisplay()">
+                        <option value="Mens" selected>Mens</option>
+                        <option value="Womens">Womens</option>
+                    </select>
+                </div>
+
+                <div class="inline" style="margin-top: 8px;">
+                    <label>Livello:</label>
+                    <select id="shot-level" style="padding: 8px; background: #0f3460; border: 1px solid #1a1a2e; color: white; border-radius: 4px; font-size: 13px;" onchange="updateShotLengthDisplay()">
+                        <option value="Scratch" selected>Scratch</option>
+                        <option value="Bogey">Bogey</option>
+                    </select>
+                </div>
+
+                <div id="shot-length-values" style="margin-top: 10px; padding: 10px; background: #0f3460; border-radius: 4px; font-size: 12px;">
+                    <!-- Valori verranno popolati da JS -->
+                </div>
+
+                <div class="help-text">
+                    Valori USGA da golf-rating-system (altitudine 0 ft)
                 </div>
             </div>
 
@@ -293,14 +344,25 @@
                         Nessuna misurazione ancora
                     </div>
                 </div>
-            </div>
 
-            <!-- Mappetta -->
-            @if($course->map_image_path)
-            <button class="btn-secondary" onclick="toggleRefPanel()" style="margin-top:10px;">
-                🗺️ Mostra/Nascondi Mappetta
-            </button>
-            @endif
+                <!-- Riepilogo Larghezze Fairway -->
+                <div id="width-results" style="margin-top: 10px; display: none;">
+                    <strong style="color: #2196F3;">Larghezze Fairway:</strong>
+                    <div id="width-list" style="font-size: 12px; margin-top: 5px;"></div>
+                </div>
+
+                <!-- Riepilogo Distanze Laterali -->
+                <div id="lateral-results" style="margin-top: 10px; display: none;">
+                    <strong style="color: #9C27B0;">Distanze Laterali:</strong>
+                    <div id="lateral-list" style="font-size: 12px; margin-top: 5px;"></div>
+                </div>
+
+                <!-- Riepilogo Bunker -->
+                <div id="bunker-results" style="margin-top: 10px;">
+                    <strong style="color: #FF9800;">Bunker:</strong>
+                    <span id="bunker-summary">0 bunker, fraction: 0</span>
+                </div>
+            </div>
         </div>
 
         <div class="map-container">
@@ -308,16 +370,6 @@
 
             <div class="mode-indicator" id="mode-indicator"></div>
             <div class="distance-tooltip" id="distance-tooltip"></div>
-
-            @if($course->map_image_path)
-            <div class="ref-panel hidden" id="ref-panel">
-                <div class="ref-panel-header">
-                    <span>Mappetta riferimento</span>
-                    <button class="btn-danger" onclick="toggleRefPanel()">✕</button>
-                </div>
-                <img src="{{ $course->map_url }}" alt="Mappa">
-            </div>
-            @endif
         </div>
     </div>
 
@@ -341,7 +393,11 @@
         let currentDrive = null;
         let widthMode = false;
         let widthPoints = [];
-        let markers = { tee: null, green: null, shots: [], lines: [], width: [] };
+        let lateralMode = false;
+        let lateralPoints = [];
+        let fairwayWidths = [];  // Array per memorizzare più larghezze
+        let lateralDistances = [];  // Array per memorizzare più distanze laterali
+        let markers = { tee: null, green: null, shots: [], lines: [], width: [], lateral: [] };
 
         // Init mappa
         const map = L.map('map', { zoomControl: true });
@@ -484,10 +540,38 @@
         function addShot() {
             if (!currentDrive) return;
 
-            // Aggiungi colpo 100 yards oltre l'ultimo
+            // Calcola distanza già percorsa
+            let totalMeters = 0;
+            let prev = currentDrive.tee;
+            currentDrive.shots.forEach(shot => {
+                totalMeters += map.distance(L.latLng(prev.lat, prev.lng), L.latLng(shot.lat, shot.lng));
+                prev = shot;
+            });
+
+            // Ottieni shot length dal selettore corrente
+            const gender = document.getElementById('shot-gender').value;
+            const level = document.getElementById('shot-level').value;
+            const shotData = SHOT_LENGTH_TABLES[gender][level];
+            const numShots = currentDrive.shots.length + 1; // prossimo colpo
+
+            // Calcola distanza target cumulativa per questo colpo
+            let targetTotalYards;
+            if (numShots === 2) {
+                targetTotalYards = shotData.shot2;
+            } else if (numShots === 3 && shotData.shot3) {
+                targetTotalYards = shotData.shot3;
+            } else {
+                // Fallback: aggiungi 150 yards
+                targetTotalYards = Math.round(totalMeters / YD) + 150;
+            }
+
+            // Distanza da aggiungere = target totale - già percorso
+            const alreadyYards = Math.round(totalMeters / YD);
+            const addYards = Math.max(50, targetTotalYards - alreadyYards); // minimo 50 yards
+
             const lastShot = currentDrive.shots[currentDrive.shots.length - 1] || currentDrive.tee;
             const bearing = HOLE_DATA.green ? getBearing(lastShot, HOLE_DATA.green) : 0;
-            const newShot = destinationPoint(lastShot, 100 * YD, bearing);
+            const newShot = destinationPoint(lastShot, addYards * YD, bearing);
 
             currentDrive.shots.push(newShot);
             addShotMarker(newShot, currentDrive.shots.length);
@@ -694,13 +778,121 @@
 
                 line.bindPopup(`Larghezza: <strong>${yards} yards</strong> (${meters}m)`).openPopup();
 
-                setMode(`📏 Larghezza: ${yards} yards`);
+                // Salva la larghezza nell'array
+                fairwayWidths.push({ yards, meters });
+                updateWidthResults();
 
-                // Reset dopo 3 secondi
+                setMode(`📏 Larghezza: ${yards} yards (salvata)`);
+
+                // Reset per nuova misurazione dopo 2 secondi
                 setTimeout(() => {
-                    cancelWidth();
-                }, 3000);
+                    widthMode = false;
+                    widthPoints = [];
+                    document.getElementById('width-btn').classList.remove('active');
+                    document.getElementById('width-btn').textContent = '📏 Misura Larghezza Fairway';
+                    setMode('');
+                }, 2000);
             }
+        }
+
+        function updateWidthResults() {
+            const container = document.getElementById('width-results');
+            const list = document.getElementById('width-list');
+
+            if (fairwayWidths.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            list.innerHTML = fairwayWidths.map((w, i) =>
+                `<div style="padding: 3px 0;">Larghezza ${i + 1}: <strong>${w.yards} yds</strong> (${w.meters}m)</div>`
+            ).join('');
+        }
+
+        // === LATERAL DISTANCE MEASUREMENT ===
+
+        function startLateralMeasure() {
+            if (lateralMode) {
+                cancelLateral();
+                return;
+            }
+
+            lateralMode = true;
+            lateralPoints = [];
+
+            document.getElementById('lateral-btn').classList.add('active');
+            document.getElementById('lateral-btn').textContent = '❌ Annulla Misurazione';
+            setMode('↔️ LATERALE: Click su due punti per misurare');
+        }
+
+        function cancelLateral() {
+            lateralMode = false;
+            lateralPoints = [];
+            markers.lateral.forEach(m => map.removeLayer(m));
+            markers.lateral = [];
+
+            document.getElementById('lateral-btn').classList.remove('active');
+            document.getElementById('lateral-btn').textContent = '↔️ Misura Distanza Laterale';
+            setMode('');
+        }
+
+        function handleLateralClick(latlng) {
+            lateralPoints.push(latlng);
+
+            const marker = L.circleMarker(latlng, {
+                radius: 6,
+                color: '#9C27B0',
+                fillColor: '#9C27B0',
+                fillOpacity: 1
+            }).addTo(map);
+            markers.lateral.push(marker);
+
+            if (lateralPoints.length === 2) {
+                // Calcola e mostra
+                const dist = map.distance(lateralPoints[0], lateralPoints[1]);
+                const yards = Math.round(dist / YD);
+                const meters = Math.round(dist);
+
+                const line = L.polyline([lateralPoints[0], lateralPoints[1]], {
+                    color: '#9C27B0',
+                    weight: 3,
+                    dashArray: '5, 10'
+                }).addTo(map);
+                markers.lateral.push(line);
+
+                line.bindPopup(`Distanza Laterale: <strong>${yards} yards</strong> (${meters}m)`).openPopup();
+
+                // Salva la distanza nell'array
+                lateralDistances.push({ yards, meters });
+                updateLateralResults();
+
+                setMode(`↔️ Laterale: ${yards} yards (salvata)`);
+
+                // Reset per nuova misurazione dopo 2 secondi
+                setTimeout(() => {
+                    lateralMode = false;
+                    lateralPoints = [];
+                    document.getElementById('lateral-btn').classList.remove('active');
+                    document.getElementById('lateral-btn').textContent = '↔️ Misura Distanza Laterale';
+                    setMode('');
+                }, 2000);
+            }
+        }
+
+        function updateLateralResults() {
+            const container = document.getElementById('lateral-results');
+            const list = document.getElementById('lateral-list');
+
+            if (lateralDistances.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            list.innerHTML = lateralDistances.map((d, i) =>
+                `<div style="padding: 3px 0;">Distanza ${i + 1}: <strong>${d.yards} yds</strong> (${d.meters}m)</div>`
+            ).join('');
         }
 
         // === MAP CLICK HANDLER ===
@@ -708,8 +900,22 @@
         map.on('click', function(e) {
             if (widthMode) {
                 handleWidthClick(e.latlng);
+            } else if (lateralMode) {
+                handleLateralClick(e.latlng);
             }
         });
+
+        // === BUNKER SUMMARY ===
+
+        function updateBunkerSummary() {
+            const count = document.getElementById('bunker-count').value || 0;
+            const fraction = document.getElementById('bunker-fraction').value || 0;
+            document.getElementById('bunker-summary').textContent = `${count} bunker, fraction: ${fraction}`;
+        }
+
+        // Event listeners per bunker
+        document.getElementById('bunker-count').addEventListener('change', updateBunkerSummary);
+        document.getElementById('bunker-fraction').addEventListener('change', updateBunkerSummary);
 
         // === HELPERS ===
 
@@ -749,9 +955,36 @@
             document.getElementById('distance-tooltip').classList.remove('active');
         }
 
-        function toggleRefPanel() {
-            document.getElementById('ref-panel')?.classList.toggle('hidden');
+        // === SHOT LENGTH TABLES (from golf-rating-system) ===
+        const SHOT_LENGTH_TABLES = {
+            Mens: {
+                Scratch: { shot1: 250, shot2: 470 },
+                Bogey: { shot1: 200, shot2: 370, shot3: 540 }
+            },
+            Womens: {
+                Scratch: { shot1: 210, shot2: 400 },
+                Bogey: { shot1: 150, shot2: 280, shot3: 410 }
+            }
+        };
+
+        function updateShotLengthDisplay() {
+            const gender = document.getElementById('shot-gender').value;
+            const level = document.getElementById('shot-level').value;
+            const data = SHOT_LENGTH_TABLES[gender][level];
+
+            let html = `<div style="color: #4CAF50; margin-bottom: 5px;"><strong>${gender} ${level}</strong></div>`;
+            html += `<div>1° Colpo: <strong>${data.shot1} yds</strong></div>`;
+            html += `<div>2 Colpi totali: <strong>${data.shot2} yds</strong></div>`;
+            if (data.shot3) {
+                html += `<div>3 Colpi totali: <strong>${data.shot3} yds</strong></div>`;
+            }
+
+            document.getElementById('shot-length-values').innerHTML = html;
         }
+
+        // Inizializza display shot length e bunker summary
+        updateShotLengthDisplay();
+        updateBunkerSummary();
 
         // Calcola bearing tra due punti
         function getBearing(from, to) {
