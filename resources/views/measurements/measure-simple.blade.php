@@ -341,7 +341,7 @@
         let currentDrive = null;
         let widthMode = false;
         let widthPoints = [];
-        let markers = { tee: null, green: null, holeLine: null, shots: [], lines: [], width: [] };
+        let markers = { tee: null, green: null, shots: [], lines: [], width: [] };
 
         // Init mappa
         const map = L.map('map', { zoomControl: true });
@@ -392,70 +392,19 @@
         function displayMappedPoints() {
             if (HOLE_DATA.tee) {
                 markers.tee = L.marker([HOLE_DATA.tee.lat, HOLE_DATA.tee.lng], {
-                    icon: makeIcon('#FFC107', 'T', 32),
-                    draggable: true
+                    icon: makeIcon('#FFC107', 'T', 32)
                 }).addTo(map).bindPopup('Tee Buca ' + HOLE_NUMBER);
-
-                markers.tee.on('drag', function(e) {
-                    HOLE_DATA.tee = { lat: e.latlng.lat, lng: e.latlng.lng };
-                    updateHoleLineAndInfo();
-                });
-
-                markers.tee.on('dragend', function(e) {
-                    persistTee(e.target.getLatLng());
-                });
             }
 
             if (HOLE_DATA.green) {
                 markers.green = L.marker([HOLE_DATA.green.lat, HOLE_DATA.green.lng], {
-                    icon: makeIcon('#4CAF50', 'G', 32),
-                    draggable: true
+                    icon: makeIcon('#4CAF50', 'G', 32)
                 }).addTo(map).bindPopup('Green Buca ' + HOLE_NUMBER);
-
-                markers.green.on('drag', function(e) {
-                    HOLE_DATA.green = { lat: e.latlng.lat, lng: e.latlng.lng };
-                    updateHoleLineAndInfo();
-                });
-
-                markers.green.on('dragend', function(e) {
-                    persistGreen(e.target.getLatLng());
-                });
             }
 
-            updateHoleLineAndInfo();
-        }
-
-        displayMappedPoints();
-
-        function setHolePointsDraggable(enabled) {
-            [markers.tee, markers.green].forEach(m => {
-                if (!m) return;
-                if (!m.dragging) return;
-                if (enabled) m.dragging.enable();
-                else m.dragging.disable();
-            });
-        }
-
-        function refreshReadyStatus() {
-            const status = document.getElementById('status');
-            const ready = !!(HOLE_DATA.green && HOLE_DATA.tee);
-            if (ready) {
-                status.className = 'status-bar ready';
-                status.textContent = '✅ Pronto per misurare';
-            } else {
-                status.className = 'status-bar warning';
-                status.textContent = '⚠️ Mappa prima tee e green';
-            }
-        }
-
-        function updateHoleLineAndInfo() {
-            if (markers.holeLine) {
-                map.removeLayer(markers.holeLine);
-                markers.holeLine = null;
-            }
-
+            // Linea tee-green
             if (HOLE_DATA.tee && HOLE_DATA.green) {
-                markers.holeLine = L.polyline([
+                const line = L.polyline([
                     [HOLE_DATA.tee.lat, HOLE_DATA.tee.lng],
                     [HOLE_DATA.green.lat, HOLE_DATA.green.lng]
                 ], {
@@ -465,72 +414,29 @@
                     opacity: 0.6
                 }).addTo(map);
 
+                // Calcola e mostra distanza
                 const dist = map.distance(
                     L.latLng(HOLE_DATA.tee.lat, HOLE_DATA.tee.lng),
                     L.latLng(HOLE_DATA.green.lat, HOLE_DATA.green.lng)
                 );
                 const yards = Math.round(dist / YD);
-                markers.holeLine.bindPopup(`Distanza Tee-Green: <strong>${yards} yards</strong>`);
 
+                line.bindPopup(`Distanza Tee-Green: <strong>${yards} yards</strong>`);
+
+                // Aggiorna info se non c'è già
                 if (!HOLE_DATA.length) {
                     document.getElementById('hole-length').textContent = yards + ' yds (calc)';
                 }
-            }
 
-            refreshReadyStatus();
+                // Fit bounds
+                map.fitBounds([
+                    [HOLE_DATA.tee.lat, HOLE_DATA.tee.lng],
+                    [HOLE_DATA.green.lat, HOLE_DATA.green.lng]
+                ], { padding: [50, 50] });
+            }
         }
 
-        async function persistGreen(latlng) {
-            document.getElementById('status').className = 'status-bar active';
-            document.getElementById('status').textContent = '💾 Salvataggio Green...';
-            try {
-                const response = await fetch(`/courses/${COURSE_ID}/holes-data/${HOLE_NUMBER}/green`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': CSRF,
-                    },
-                    body: JSON.stringify({ lat: latlng.lat, lng: latlng.lng }),
-                });
-                const data = await response.json();
-                if (!data.success) {
-                    alert('Errore salvataggio Green: ' + (data.message || ''));
-                } else {
-                    HOLE_DATA.green = { lat: latlng.lat, lng: latlng.lng };
-                    updateHoleLineAndInfo();
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Errore di connessione salvataggio Green');
-            }
-            refreshReadyStatus();
-        }
-
-        async function persistTee(latlng) {
-            document.getElementById('status').className = 'status-bar active';
-            document.getElementById('status').textContent = '💾 Salvataggio Tee...';
-            try {
-                const response = await fetch(`/courses/${COURSE_ID}/holes-data/${HOLE_NUMBER}/tee`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': CSRF,
-                    },
-                    body: JSON.stringify({ lat: latlng.lat, lng: latlng.lng, color: 'yellow' }),
-                });
-                const data = await response.json();
-                if (!data.success) {
-                    alert('Errore salvataggio Tee: ' + (data.message || ''));
-                } else {
-                    HOLE_DATA.tee = { lat: latlng.lat, lng: latlng.lng };
-                    updateHoleLineAndInfo();
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Errore di connessione salvataggio Tee');
-            }
-            refreshReadyStatus();
-        }
+        displayMappedPoints();
 
         // === DRIVE MEASUREMENT ===
 
@@ -539,8 +445,6 @@
                 alert('Mappa prima il Tee di questa buca');
                 return;
             }
-
-            setHolePointsDraggable(false);
 
             // Clear previous
             clearDrive();
@@ -648,7 +552,6 @@
             clearDrive();
             resetUI();
             document.getElementById('results').innerHTML = '<div style="color:#666; text-align:center; padding:20px;">Misurazione annullata</div>';
-            setHolePointsDraggable(true);
         }
 
         async function completeDrive() {
@@ -702,7 +605,6 @@
                     document.getElementById('hole-length').textContent = totalYards + ' yds';
 
                     resetUI();
-                    setHolePointsDraggable(true);
                 } else {
                     alert('Errore: ' + (data.message || 'Salvataggio fallito'));
                 }

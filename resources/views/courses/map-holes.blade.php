@@ -223,15 +223,6 @@
                 </button>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px;">
-                <button class="btn btn-danger" onclick="clearSelectedGreen()" id="clear-green-btn" disabled>
-                    🧹 Cancella Green
-                </button>
-                <button class="btn btn-danger" onclick="clearSelectedTee()" id="clear-tee-btn" disabled>
-                    🧹 Cancella Tee
-                </button>
-            </div>
-
             <button class="btn btn-danger" onclick="clearMode()" id="clear-btn" style="display:none;">
                 ❌ Annulla
             </button>
@@ -403,8 +394,6 @@
             // Enable mode buttons
             document.getElementById('green-btn').disabled = false;
             document.getElementById('tee-btn').disabled = false;
-            document.getElementById('clear-green-btn').disabled = false;
-            document.getElementById('clear-tee-btn').disabled = false;
 
             // Zoom to hole if marker exists
             if (markers[num]?.green) {
@@ -518,66 +507,6 @@
             const panel = document.getElementById('ref-panel');
             if (panel) {
                 panel.classList.toggle('hidden');
-            }
-        }
-
-        async function clearSelectedGreen() {
-            if (!selectedHole) {
-                alert('Seleziona prima una buca');
-                return;
-            }
-            if (!confirm(`Cancellare il Green della buca ${selectedHole}?`)) return;
-
-            try {
-                const response = await fetch(`/courses/${COURSE_ID}/holes-data/${selectedHole}/green`, {
-                    method: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': CSRF_TOKEN,
-                    },
-                });
-                const data = await response.json();
-                if (data.success) {
-                    if (markers[selectedHole]?.green) {
-                        map.removeLayer(markers[selectedHole].green);
-                        markers[selectedHole].green = null;
-                    }
-                    loadMappingStatus();
-                } else {
-                    alert('❌ ' + (data.message || 'Errore cancellazione'));
-                }
-            } catch (e) {
-                console.error('Clear green error:', e);
-                alert('❌ Errore di connessione');
-            }
-        }
-
-        async function clearSelectedTee() {
-            if (!selectedHole) {
-                alert('Seleziona prima una buca');
-                return;
-            }
-            if (!confirm(`Cancellare il Tee (giallo) della buca ${selectedHole}?`)) return;
-
-            try {
-                const response = await fetch(`/courses/${COURSE_ID}/holes-data/${selectedHole}/tee?color=yellow`, {
-                    method: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': CSRF_TOKEN,
-                    },
-                });
-                const data = await response.json();
-                if (data.success) {
-                    if (markers[selectedHole]?.tee) {
-                        map.removeLayer(markers[selectedHole].tee);
-                        markers[selectedHole].tee = null;
-                    }
-                    loadMappingStatus();
-                } else {
-                    alert('❌ ' + (data.message || 'Errore cancellazione'));
-                }
-            } catch (e) {
-                console.error('Clear tee error:', e);
-                alert('❌ Errore di connessione');
             }
         }
     </script>
