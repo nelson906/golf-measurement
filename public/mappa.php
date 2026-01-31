@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Golf Mapper Pro - Castelgandolfo</title>
+    <meta name="map-secret" content="<?php echo htmlspecialchars(getenv('GOLF_MEASUREMENT_PUBLIC_SECRET') ?: '', ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; background: #1a1a1a; }
@@ -51,6 +52,19 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+    var urlParams = new URLSearchParams(window.location.search);
+    var courseId = parseInt(urlParams.get('course_id') || '', 10);
+    if (!Number.isFinite(courseId) || courseId < 1) {
+        courseId = null;
+    }
+
+    var centerLat = parseFloat(urlParams.get('lat') || '41.73943');
+    var centerLng = parseFloat(urlParams.get('lng') || '12.62472');
+    if (!Number.isFinite(centerLat) || centerLat < -90 || centerLat > 90) centerLat = 41.73943;
+    if (!Number.isFinite(centerLng) || centerLng < -180 || centerLng > 180) centerLng = 12.62472;
+
+    var mapSecret = document.querySelector('meta[name="map-secret"]')?.getAttribute('content') || '';
+
     var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Esri World Imagery'
     });
@@ -60,7 +74,7 @@
     });
 
     var map = L.map('map', {
-        center: [41.73943, 12.62472],
+        center: [centerLat, centerLng],
         zoom: 18,
         layers: [grafica]
     });
@@ -100,14 +114,28 @@
     });
 
     function saveToDb(hole, type, lat, lng) {
+        if (!courseId) {
+            console.warn('course_id missing. Open mappa.php?course_id=123');
+            return;
+        }
+        if (!mapSecret) {
+            console.warn('Missing GOLF_MEASUREMENT_PUBLIC_SECRET env var. Requests will be rejected.');
+            return;
+        }
         var formData = new FormData();
-        formData.append('course_id', 11821);
+        formData.append('course_id', courseId);
         formData.append('hole', hole);
         formData.append('type', type);
         formData.append('lat', lat);
         formData.append('lng', lng);
 
-        fetch('save_point.php', { method: 'POST', body: formData })
+        fetch('save_point.php', {
+            method: 'POST',
+            headers: {
+                'X-MAP-SECRET': mapSecret
+            },
+            body: formData
+        })
         .then(r => r.text()).then(t => console.log('DB:', t));
     }
 
@@ -121,9 +149,17 @@
         var log = document.getElementById('log_content');
         log.removeChild(log.firstChild);
 
+        if (!courseId || !mapSecret) return;
+
         var formData = new FormData();
-        formData.append('course_id', 11821);
-        fetch('delete_last.php', { method: 'POST', body: formData });
+        formData.append('course_id', courseId);
+        fetch('delete_last.php', {
+            method: 'POST',
+            headers: {
+                'X-MAP-SECRET': mapSecret
+            },
+            body: formData
+        });
     }
 </script>
 </body>
