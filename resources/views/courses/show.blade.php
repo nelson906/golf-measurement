@@ -146,6 +146,24 @@
             background: #fff3cd;
             color: #856404;
         }
+        .status-mapped {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        .status-partial {
+            background: #ffe0b2;
+            color: #e65100;
+        }
+        .status-not-mapped {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+        .mapping-indicator {
+            font-size: 11px;
+            margin-top: 5px;
+            padding: 3px 8px;
+            border-radius: 3px;
+        }
         .alert {
             padding: 15px;
             margin-bottom: 20px;
@@ -398,7 +416,13 @@
             <h2>⛳ Buche del Campo</h2>
 
             <div class="holes-grid">
-                @foreach($course->holes as $hole)
+                @foreach($course->holes->sortBy('hole_number') as $hole)
+                    @php
+                        $hasTee = !empty($hole->tee_points['yellow']) || !empty($hole->tee_points['red']);
+                        $hasGreen = !empty($hole->green_point);
+                        $isComplete = $hasTee && $hasGreen;
+                        $isPartial = ($hasTee || $hasGreen) && !$isComplete;
+                    @endphp
                     <div class="hole-card" onclick="measureHole({{ $course->id }}, {{ $hole->hole_number }})">
                         <div class="hole-number">Buca {{ $hole->hole_number }}</div>
                         <div class="hole-info">
@@ -412,7 +436,16 @@
                             @if($hole->length_yards)
                                 {{ $hole->length_yards }} yards
                             @else
-                                Non misurata
+                                -
+                            @endif
+                        </div>
+                        <div class="mapping-indicator {{ $isComplete ? 'status-mapped' : ($isPartial ? 'status-partial' : 'status-not-mapped') }}">
+                            @if($isComplete)
+                                📍 Mappata
+                            @elseif($isPartial)
+                                ◐ Parziale
+                            @else
+                                ✗ Non mappata
                             @endif
                         </div>
                         <div class="hole-status {{ $hole->drives->count() > 0 ? 'status-measured' : 'status-not-measured' }}">

@@ -32,7 +32,7 @@ class MeasurementController extends Controller
         // Carica drive esistenti per questa buca
         $hole->load(['drives.measurements', 'drives.user']);
 
-        return view('measurements.measure', compact('course', 'hole'));
+        return view('measurements.measure-simple', compact('course', 'hole'));
     }
 
     /**
