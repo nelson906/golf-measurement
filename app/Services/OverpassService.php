@@ -39,26 +39,15 @@ class OverpassService
     protected function queryGolfElements(float $lat, float $lng, float $radiusMeters): array
     {
         // Query per cercare tutti gli elementi golf nel raggio
-        $query = sprintf('[out:json][timeout:25];
+        // Query semplificata per evitare timeout
+        $query = sprintf('[out:json][timeout:60];
 (
-  node["golf"="hole"](around:%d,%f,%f);
-  node["golf"="tee"](around:%d,%f,%f);
-  node["golf"="pin"](around:%d,%f,%f);
-  node["golf"="green"](around:%d,%f,%f);
-  way["golf"="hole"](around:%d,%f,%f);
-  way["golf"="green"](around:%d,%f,%f);
-  way["golf"="tee"](around:%d,%f,%f);
-  way["golf"="fairway"](around:%d,%f,%f);
+  node["golf"](around:%d,%f,%f);
+  way["golf"](around:%d,%f,%f);
 );
 out body;
 >;
 out skel qt;',
-            $radiusMeters, $lat, $lng,
-            $radiusMeters, $lat, $lng,
-            $radiusMeters, $lat, $lng,
-            $radiusMeters, $lat, $lng,
-            $radiusMeters, $lat, $lng,
-            $radiusMeters, $lat, $lng,
             $radiusMeters, $lat, $lng,
             $radiusMeters, $lat, $lng
         );
@@ -72,11 +61,9 @@ out skel qt;',
     protected function queryGolfElementsByName(string $courseName): array
     {
         // Cerca prima l'area del golf course, poi gli elementi al suo interno
-        $query = sprintf('[out:json][timeout:30];
-(
-  way["leisure"="golf_course"]["name"~"%s",i];
-  relation["leisure"="golf_course"]["name"~"%s",i];
-)->.golfcourse;
+        // Query semplificata per nome
+        $query = sprintf('[out:json][timeout:60];
+area["leisure"="golf_course"]["name"~"%s",i]->.golfcourse;
 (
   node["golf"](area.golfcourse);
   way["golf"](area.golfcourse);
@@ -84,7 +71,6 @@ out skel qt;',
 out body;
 >;
 out skel qt;',
-            addslashes($courseName),
             addslashes($courseName)
         );
 
@@ -97,7 +83,7 @@ out skel qt;',
     protected function executeQuery(string $query): array
     {
         try {
-            $response = Http::timeout(30)
+            $response = Http::timeout(90)
                 ->withHeaders([
                     'User-Agent' => 'GolfMeasurement/1.0 (golf rating app)',
                 ])
