@@ -381,6 +381,18 @@
             </div>
         </div>
 
+        <!-- Sezione Mappatura Buche -->
+        <div class="map-section" style="background: #e8f5e9; border: 2px solid #4CAF50;">
+            <h2>📍 Mappatura Coordinate Buche</h2>
+            <p style="color: #666; margin-bottom: 15px;">
+                Prima di misurare, mappa le coordinate dei green e tee di ogni buca.
+                Puoi caricare automaticamente da OpenStreetMap o mappare manualmente.
+            </p>
+            <a href="{{ route('courses.map-holes', $course) }}" class="btn" style="display: inline-block; width: auto; padding: 12px 24px;">
+                📍 Mappa le Buche
+            </a>
+        </div>
+
         <!-- Sezione Buche -->
         <div class="holes-section">
             <h2>⛳ Buche del Campo</h2>

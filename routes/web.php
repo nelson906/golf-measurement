@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\GolfCourseController;
 use App\Http\Controllers\GolfApiController;
+use App\Http\Controllers\HoleDataController;
 use App\Http\Controllers\MeasurementController;
 use Illuminate\Support\Facades\Route;
 
@@ -54,4 +55,14 @@ Route::prefix('api/golf')->group(function () {
     Route::get('search', [GolfApiController::class, 'search'])->name('golf-api.search');
     Route::get('nearby', [GolfApiController::class, 'searchByLocation'])->name('golf-api.nearby');
     Route::get('course/{id}', [GolfApiController::class, 'getCourse'])->name('golf-api.course');
+});
+
+// Hole Data Routes (OSM + Manual Mapping)
+Route::get('courses/{course}/map-holes', [HoleDataController::class, 'mapHolesView'])->name('courses.map-holes');
+Route::prefix('courses/{course}/holes-data')->group(function () {
+    Route::get('load-osm', [HoleDataController::class, 'loadFromOSM'])->name('holes.load-osm');
+    Route::get('mapping-status', [HoleDataController::class, 'getMappingStatus'])->name('holes.mapping-status');
+    Route::post('batch', [HoleDataController::class, 'saveBatch'])->name('holes.save-batch');
+    Route::post('{holeNumber}/green', [HoleDataController::class, 'saveGreenPoint'])->name('holes.save-green');
+    Route::post('{holeNumber}/tee', [HoleDataController::class, 'saveTeePoint'])->name('holes.save-tee');
 });
