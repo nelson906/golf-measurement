@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\GolfCourseController;
+use App\Http\Controllers\GolfApiController;
 use App\Http\Controllers\MeasurementController;
 use Illuminate\Support\Facades\Route;
 
@@ -46,3 +47,11 @@ Route::delete('drives/{drive}', [MeasurementController::class, 'destroyDrive'])
 // Measurement Routes (larghezze)
 Route::post('measurements', [MeasurementController::class, 'storeMeasurement'])
     ->name('measurements.store');
+
+// Golf Course API Routes
+Route::prefix('api/golf')->group(function () {
+    Route::get('status', [GolfApiController::class, 'status'])->name('golf-api.status');
+    Route::get('search', [GolfApiController::class, 'search'])->name('golf-api.search');
+    Route::get('nearby', [GolfApiController::class, 'searchByLocation'])->name('golf-api.nearby');
+    Route::get('course/{id}', [GolfApiController::class, 'getCourse'])->name('golf-api.course');
+});

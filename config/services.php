@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'golfcourseapi' => [
+        'api_key' => env('GOLFCOURSEAPI_KEY'),
+        'base_url' => env('GOLFCOURSEAPI_URL', 'https://api.golfcourseapi.com/v1'),
+    ],
+
 ];

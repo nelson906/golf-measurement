@@ -161,6 +161,39 @@
         .loading.active {
             display: block;
         }
+        .api-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            font-size: 10px;
+            border-radius: 10px;
+            margin-left: 8px;
+            font-weight: normal;
+        }
+        .api-badge.golfapi {
+            background: #4CAF50;
+            color: white;
+        }
+        .api-badge.nominatim {
+            background: #2196F3;
+            color: white;
+        }
+        .api-status {
+            font-size: 11px;
+            padding: 5px 10px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .api-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .api-status .dot.green { background: #4CAF50; }
+        .api-status .dot.gray { background: #ccc; }
     </style>
 </head>
 <body>
@@ -177,6 +210,10 @@
 
                     <div class="form-group">
                         <label for="search">🔍 Cerca Campo</label>
+                        <div id="api-status" class="api-status">
+                            <span class="dot gray" id="api-dot"></span>
+                            <span id="api-status-text">Verifica API...</span>
+                        </div>
                         <div class="search-box">
                             <input type="text" id="search"
                                    placeholder="es: Country Club Castel Gandolfo">
@@ -184,7 +221,7 @@
                             <div class="search-results" id="search-results"></div>
                         </div>
                         <div class="help-text">
-                            Digita il nome del campo per cercarlo automaticamente
+                            Digita il nome del campo per cercarlo (GolfCourseAPI + OpenStreetMap)
                         </div>
                     </div>
 
@@ -240,6 +277,31 @@
 
         let marker = null;
         let searchTimeout = null;
+        let golfApiAvailable = false;
+
+        // Verifica stato API all'avvio
+        checkApiStatus();
+
+        async function checkApiStatus() {
+            try {
+                const response = await fetch('{{ route("golf-api.status") }}');
+                const data = await response.json();
+                golfApiAvailable = data.configured;
+
+                const dot = document.getElementById('api-dot');
+                const text = document.getElementById('api-status-text');
+
+                if (golfApiAvailable) {
+                    dot.classList.remove('gray');
+                    dot.classList.add('green');
+                    text.textContent = 'GolfCourseAPI attiva + OpenStreetMap';
+                } else {
+                    text.textContent = 'Solo OpenStreetMap (configura GOLFCOURSEAPI_KEY in .env)';
+                }
+            } catch (e) {
+                document.getElementById('api-status-text').textContent = 'Solo OpenStreetMap';
+            }
+        }
 
         // Click sulla mappa
         map.on('click', function(e) {
@@ -264,23 +326,68 @@
             }, 500);
         });
 
-        // Cerca luogo con Nominatim (OpenStreetMap)
+        // Cerca luogo - combina GolfCourseAPI e Nominatim
         async function searchPlace(query) {
-            try {
-                const response = await fetch(
+            const allResults = [];
+
+            // Cerca in parallelo
+            const promises = [];
+
+            // GolfCourseAPI (se disponibile)
+            if (golfApiAvailable) {
+                promises.push(
+                    fetch(`{{ route("golf-api.search") }}?q=${encodeURIComponent(query)}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success && data.courses) {
+                                return data.courses.map(c => ({
+                                    name: c.name || c.club_name || c.courseName,
+                                    display_name: [
+                                        c.name || c.club_name || c.courseName,
+                                        c.city,
+                                        c.state,
+                                        c.country
+                                    ].filter(Boolean).join(', '),
+                                    lat: c.latitude || c.lat,
+                                    lon: c.longitude || c.lng,
+                                    source: 'golfapi',
+                                    raw: c
+                                }));
+                            }
+                            return [];
+                        })
+                        .catch(() => [])
+                );
+            }
+
+            // Nominatim (sempre)
+            promises.push(
+                fetch(
                     `https://nominatim.openstreetmap.org/search?` +
                     `q=${encodeURIComponent(query + ' golf')}&` +
                     `format=json&` +
-                    `limit=5&` +
-                    `countrycodes=it`
-                );
+                    `limit=5`
+                )
+                    .then(r => r.json())
+                    .then(results => results.map(r => ({
+                        name: r.name || r.display_name.split(',')[0],
+                        display_name: r.display_name,
+                        lat: r.lat,
+                        lon: r.lon,
+                        source: 'nominatim',
+                        raw: r
+                    })))
+                    .catch(() => [])
+            );
 
-                const results = await response.json();
+            try {
+                const resultsArrays = await Promise.all(promises);
+                resultsArrays.forEach(arr => allResults.push(...arr));
 
                 document.getElementById('search-loading').classList.remove('active');
 
-                if (results.length > 0) {
-                    displaySearchResults(results);
+                if (allResults.length > 0) {
+                    displaySearchResults(allResults);
                 } else {
                     document.getElementById('search-results').innerHTML =
                         '<div class="search-result-item">Nessun risultato trovato</div>';
@@ -300,8 +407,13 @@
             results.forEach(result => {
                 const item = document.createElement('div');
                 item.className = 'search-result-item';
+
+                const badge = result.source === 'golfapi'
+                    ? '<span class="api-badge golfapi">Golf API</span>'
+                    : '<span class="api-badge nominatim">OSM</span>';
+
                 item.innerHTML = `
-                    <div class="result-name">${result.name || result.display_name.split(',')[0]}</div>
+                    <div class="result-name">${result.name}${badge}</div>
                     <div class="result-address">${result.display_name}</div>
                 `;
 
@@ -322,11 +434,15 @@
             document.getElementById('name').value = name;
             document.getElementById('location').value = location;
 
-            setCoordinates(parseFloat(result.lat), parseFloat(result.lon));
+            const lat = parseFloat(result.lat);
+            const lng = parseFloat(result.lon);
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+                setCoordinates(lat, lng);
+                map.setView([lat, lng], 16);
+            }
 
             document.getElementById('search-results').classList.remove('active');
-
-            map.setView([result.lat, result.lon], 16);
         }
 
         // Imposta coordinate
