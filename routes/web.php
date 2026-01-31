@@ -65,4 +65,6 @@ Route::prefix('courses/{course}/holes-data')->group(function () {
     Route::post('batch', [HoleDataController::class, 'saveBatch'])->name('holes.save-batch');
     Route::post('{holeNumber}/green', [HoleDataController::class, 'saveGreenPoint'])->name('holes.save-green');
     Route::post('{holeNumber}/tee', [HoleDataController::class, 'saveTeePoint'])->name('holes.save-tee');
+    Route::delete('{holeNumber}/green', [HoleDataController::class, 'clearGreenPoint'])->name('holes.clear-green');
+    Route::delete('{holeNumber}/tee', [HoleDataController::class, 'clearTeePoint'])->name('holes.clear-tee');
 });

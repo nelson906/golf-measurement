@@ -154,6 +154,58 @@ class HoleDataController extends Controller
     }
 
     /**
+     * Cancella coordinate green per una buca
+     */
+    public function clearGreenPoint(Request $request, GolfCourse $course, int $holeNumber)
+    {
+        $hole = $course->holes()->where('hole_number', $holeNumber)->first();
+
+        if (!$hole) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Buca non trovata',
+            ], 404);
+        }
+
+        $hole->update(['green_point' => null]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Green buca {$holeNumber} cancellato",
+        ]);
+    }
+
+    /**
+     * Cancella coordinate tee per una buca
+     */
+    public function clearTeePoint(Request $request, GolfCourse $course, int $holeNumber)
+    {
+        $validated = $request->validate([
+            'color' => 'nullable|in:yellow,red',
+        ]);
+
+        $hole = $course->holes()->where('hole_number', $holeNumber)->first();
+
+        if (!$hole) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Buca non trovata',
+            ], 404);
+        }
+
+        $teePoints = $hole->tee_points ?? ['yellow' => null, 'red' => null];
+        $color = $validated['color'] ?? 'yellow';
+        $teePoints[$color] = null;
+        $hole->update(['tee_points' => $teePoints]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Tee {$color} buca {$holeNumber} cancellato",
+            'tee_points' => $teePoints,
+        ]);
+    }
+
+    /**
      * Salva tutte le coordinate buche in batch (mappatura rapida)
      */
     public function saveBatch(Request $request, GolfCourse $course)
