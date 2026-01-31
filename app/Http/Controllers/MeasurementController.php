@@ -92,16 +92,22 @@ class MeasurementController extends Controller
         $totalMeters = array_sum(array_column($validated['shots'], 'distance_meters'));
         $totalYards = array_sum(array_column($validated['shots'], 'distance_yards'));
 
-        $drive = Drive::create([
-            'hole_id' => $validated['hole_id'],
-            'user_id' => auth()->id() ?? 1, // TODO: implement auth
-            'tee_lat' => $validated['tee_lat'],
-            'tee_lng' => $validated['tee_lng'],
-            'total_distance_meters' => $totalMeters,
-            'total_distance_yards' => $totalYards,
-            'num_shots' => count($validated['shots']),
-            'shots' => $validated['shots'],
-        ]);
+        $userId = auth()->id() ?? 1; // TODO: implement auth
+
+        [$drive, $created] = Drive::query()->updateOrCreate(
+            [
+                'hole_id' => $validated['hole_id'],
+                'user_id' => $userId,
+            ],
+            [
+                'tee_lat' => $validated['tee_lat'],
+                'tee_lng' => $validated['tee_lng'],
+                'total_distance_meters' => $totalMeters,
+                'total_distance_yards' => $totalYards,
+                'num_shots' => count($validated['shots']),
+                'shots' => $validated['shots'],
+            ]
+        );
 
         // Aggiorna lunghezza buca se non impostata
         $hole = Hole::find($validated['hole_id']);
@@ -115,7 +121,8 @@ class MeasurementController extends Controller
         return response()->json([
             'success' => true,
             'drive' => $drive,
-            'message' => 'Drive salvato con successo!',
+            'created' => $created,
+            'message' => $created ? 'Drive salvato con successo!' : 'Drive aggiornato con successo!',
         ]);
     }
 

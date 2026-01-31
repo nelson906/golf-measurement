@@ -93,6 +93,14 @@
             overflow: hidden;
             display: none;
             box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+            resize: both;
+            min-width: 320px;
+            min-height: 220px;
+        }
+
+        #map-panel.enlarged {
+            width: min(900px, 70vw);
+            height: min(700px, 70vh);
         }
         #map-panel-header {
             display: flex;
@@ -112,8 +120,10 @@
             font-size: 12px;
             border-radius: 6px;
         }
-        #map-panel-body { position: relative; width: 100%; height: calc(100% - 41px); }
-        #ref-map-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+        #map-panel-body { position: relative; width: 100%; height: calc(100% - 41px); overflow: hidden; }
+        #ref-map-viewport { position:absolute; left:0; top:0; width:100%; height:100%; transform-origin: 0 0; cursor: grab; }
+        #ref-map-viewport.dragging { cursor: grabbing; }
+        #ref-map-img { width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; pointer-events: none; }
         #ref-map-canvas { position:absolute; left:0; top:0; width:100%; height:100%; }
     </style>
 </head>
@@ -167,13 +177,17 @@
                 <button id="save-geometry-btn" onclick="saveGeometry()" disabled>💾 Salva Geometria</button>
                 <button id="reset-geometry-btn" class="danger" onclick="resetGeometry()" disabled>🧹 Reset Geometria</button>
 
-                <h2 style="margin-top:15px;">🗺️ Calibrazione Mappetta</h2>
-                <button id="open-map-panel-btn" class="secondary" onclick="toggleMapPanel()" disabled>🗺️ Apri Mappetta</button>
-                <div class="btn-group" style="margin-top:8px;">
-                    <button id="start-calib-btn" onclick="startCalibration()" disabled>🎯 Avvia Calibrazione</button>
-                    <button id="reset-calib-btn" class="danger" onclick="resetCalibration()" disabled>🧹 Reset Calibrazione</button>
-                </div>
-                <button id="save-calib-btn" onclick="saveCalibration()" disabled>💾 Salva Calibrazione Campo</button>
+                <details id="calib-details" style="margin-top:15px;">
+                    <summary style="cursor:pointer;font-size:14px;color:#81C784;font-weight:700;">🗺️ Calibrazione Mappetta</summary>
+                    <div style="margin-top:10px;">
+                        <button id="open-map-panel-btn" class="secondary" onclick="toggleMapPanel()" disabled>🗺️ Apri Mappetta</button>
+                        <div class="btn-group" style="margin-top:8px;">
+                            <button id="start-calib-btn" onclick="startCalibration()" disabled>🎯 Avvia Calibrazione</button>
+                            <button id="reset-calib-btn" class="danger" onclick="resetCalibration()" disabled>🧹 Reset Calibrazione</button>
+                        </div>
+                        <button id="save-calib-btn" onclick="saveCalibration()" disabled>💾 Salva Calibrazione Campo</button>
+                    </div>
+                </details>
 
                 <h2 style="margin-top:15px;">🏷️ Landing Zone (da Centerline)</h2>
                 <div class="inline">
@@ -235,26 +249,30 @@
                 </div>
             </div>
         </div>
+            <div id="map">
+                <div id="map-panel">
+                    <div id="map-panel-header">
+                        <span>Mappetta (clicca per digitizzare)</span>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <button class="secondary" onclick="toggleMapPanelSize()" style="margin:0;">⤢</button>
+                            <button class="danger" onclick="toggleMapPanel()" style="margin:0;">✕</button>
+                        </div>
+                    </div>
+                    <div id="map-panel-body">
+                        <div id="ref-map-viewport">
+                            <img id="ref-map-img" alt="Mappa riferimento" />
+                            <canvas id="ref-map-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
 
-        <div id="map">
-            <div id="map-panel">
-                <div id="map-panel-header">
-                    <span>Mappetta (clicca per digitizzare)</span>
-                    <button class="danger" onclick="toggleMapPanel()">✕</button>
-                </div>
-                <div id="map-panel-body">
-                    <img id="ref-map-img" src="" alt="Mappetta">
-                    <canvas id="ref-map-canvas"></canvas>
-                </div>
+                <div class="mode-indicator" id="mode-indicator"></div>
+                <div class="distance-tooltip" id="distance-tooltip"></div>
             </div>
-
-            <div class="mode-indicator" id="mode-indicator"></div>
-            <div class="distance-tooltip" id="distance-tooltip"></div>
         </div>
-    </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script>
 const COURSE=@json($course),HOLE=@json($hole),YD=0.9144,CENTER=[{{$course->latitude}},{{$course->longitude}}];
 const HOLE_NUMBER=parseInt(HOLE?.hole_number ?? HOLE?.holeNumber ?? (location.pathname.match(/\/holes\/(\d+)\//)?.[1]||'0'),10)||0;
 const MAP_URL='{{$course->map_url}}',SAVED_CONFIG=@json($course->overlay_config);
@@ -265,6 +283,8 @@ const HOLE_GEOMETRY={
     centerline:@json($hole->centerline)
 };
 
+const SAVED_DRIVES=@json($hole->drives);
+
 let map;
 
 // Stati misurazione - SEPARATI
@@ -272,10 +292,14 @@ let teeMode=false,shotMode=false,widthMode=false,driveComplete=false;
 let currentDrive=null,drives=[],widths=[],tempWidth=[];
 let draggedMarker=null,originalDistance=0,shotIndex=0;
 
+let driveLayers=[];
+
 // Stati setup geometria
 let setupMode=false;
 let pointMode=null; // 'tee_yellow'|'tee_red'|'green'
 let drawingCenterline=false;
+
+let refView={scale:1,tx:0,ty:0,dragging:false,moved:false,lastX:0,lastY:0};
 
 let geom={
     tee_points:HOLE_GEOMETRY.tee_points||{yellow:null,red:null},
@@ -296,6 +320,7 @@ let geomLayers={
 };
 
 let mapPanelVisible=false;
+let mapPanelEnlarged=false;
 let calib={active:false,stage:'idle',zoom:18,points:[],H:null};
 let mapDraw={mode:null,drawing:false};
 let calibMapMarkers=[];
@@ -320,14 +345,17 @@ map.on('dblclick',function(e){
     }
 });
 
-document.getElementById('drive-yds').addEventListener('input',refreshLandingZones);
-document.getElementById('second-yds').addEventListener('input',refreshLandingZones);
-document.getElementById('third-yds').addEventListener('input',refreshLandingZones);
+document.getElementById('drive-yds').addEventListener('input',updateLandingUiState);
+document.getElementById('second-yds').addEventListener('input',updateLandingUiState);
+document.getElementById('third-yds').addEventListener('input',updateLandingUiState);
 
 // Render geometria pre-esistente (se presente)
 renderGeometry();
 updateLandingUiState();
-refreshLandingZones();
+clearLandingLayers();
+
+loadSavedDrives();
+updateResults();
 
 // Larghezza sempre disponibile (fuori dal Setup)
 document.getElementById('width-btn').disabled=false;
@@ -463,6 +491,19 @@ function toggleMapPanel(){
     }
 }
 
+function toggleMapPanelSize(){
+    const panel=document.getElementById('map-panel');
+    mapPanelEnlarged=!mapPanelEnlarged;
+    panel.classList.toggle('enlarged',mapPanelEnlarged);
+    // Dopo il cambio dimensioni, riallinea canvas con nuovo rect
+    setTimeout(function(){
+        if(mapPanelVisible){
+            resizeRefCanvas();
+            redrawRefCanvas();
+        }
+    },0);
+}
+
 function initMapPanel(){
     const img=document.getElementById('ref-map-img');
     if(MAP_URL){
@@ -480,7 +521,19 @@ function initMapPanel(){
         }
     });
 
+    // Quando il pannello viene ridimensionato (CSS resize), aggiorna il canvas
     const panel=document.getElementById('map-panel');
+    if(window.ResizeObserver){
+        const ro=new ResizeObserver(function(){
+            if(mapPanelVisible){
+                resizeRefCanvas();
+                redrawRefCanvas();
+            }
+        });
+        ro.observe(panel);
+    }
+
+    initRefViewportInteractions();
     panel.addEventListener('click',function(ev){
         // Evita che Leaflet riceva click provenienti dalla mappetta (importantissimo in calibrazione)
         ev.preventDefault();
@@ -493,6 +546,10 @@ function initMapPanel(){
         ev.preventDefault();
         ev.stopPropagation();
         if(!mapPanelVisible) return;
+        if(refView.moved){
+            refView.moved=false;
+            return;
+        }
         const p=getRefPixelFromEvent(ev);
         if(calib.active&&calib.stage==='await_img'){
             handleCalibrationImgClick(p);
@@ -507,7 +564,8 @@ function initMapPanel(){
 
 function resizeRefCanvas(){
     const canvas=document.getElementById('ref-map-canvas');
-    const rect=canvas.getBoundingClientRect();
+    const body=document.getElementById('map-panel-body');
+    const rect=body.getBoundingClientRect();
     canvas.width=Math.round(rect.width);
     canvas.height=Math.round(rect.height);
 }
@@ -515,10 +573,13 @@ function resizeRefCanvas(){
 function getRefPixelFromEvent(ev){
     const canvas=document.getElementById('ref-map-canvas');
     const img=document.getElementById('ref-map-img');
-    const rect=canvas.getBoundingClientRect();
+    const body=document.getElementById('map-panel-body');
+    const rect=body.getBoundingClientRect();
 
-    const x=ev.clientX-rect.left;
-    const y=ev.clientY-rect.top;
+    let x=ev.clientX-rect.left;
+    let y=ev.clientY-rect.top;
+    x=(x-refView.tx)/refView.scale;
+    y=(y-refView.ty)/refView.scale;
 
     const iw=img.naturalWidth||1;
     const ih=img.naturalHeight||1;
@@ -535,6 +596,79 @@ function getRefPixelFromEvent(ev){
     const u=(x-ox)/scale;
     const v=(y-oy)/scale;
     return {u:u,v:v,valid:(u>=0&&v>=0&&u<=iw&&v<=ih)};
+}
+
+function applyRefViewportTransform(){
+    const vp=document.getElementById('ref-map-viewport');
+    vp.style.transform=`translate(${refView.tx}px,${refView.ty}px) scale(${refView.scale})`;
+}
+
+function initRefViewportInteractions(){
+    const body=document.getElementById('map-panel-body');
+    const vp=document.getElementById('ref-map-viewport');
+
+    if(vp.dataset.inited==='1') return;
+    vp.dataset.inited='1';
+
+    function clamp(v,min,max){
+        return Math.max(min,Math.min(max,v));
+    }
+
+    body.addEventListener('wheel',function(ev){
+        if(!mapPanelVisible) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        const rect=body.getBoundingClientRect();
+        const cx=ev.clientX-rect.left;
+        const cy=ev.clientY-rect.top;
+
+        const wx=(cx-refView.tx)/refView.scale;
+        const wy=(cy-refView.ty)/refView.scale;
+
+        const dir=ev.deltaY>0 ? 0.9 : 1.1;
+        const nextScale=clamp(refView.scale*dir,1,6);
+
+        refView.scale=nextScale;
+        refView.tx=cx-wx*refView.scale;
+        refView.ty=cy-wy*refView.scale;
+
+        applyRefViewportTransform();
+    },{passive:false});
+
+    body.addEventListener('mousedown',function(ev){
+        if(!mapPanelVisible) return;
+        if(ev.button!==0) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        refView.dragging=true;
+        refView.moved=false;
+        refView.lastX=ev.clientX;
+        refView.lastY=ev.clientY;
+        vp.classList.add('dragging');
+    });
+
+    window.addEventListener('mousemove',function(ev){
+        if(!refView.dragging) return;
+        const dx=ev.clientX-refView.lastX;
+        const dy=ev.clientY-refView.lastY;
+        refView.lastX=ev.clientX;
+        refView.lastY=ev.clientY;
+        if(Math.abs(dx)+Math.abs(dy)>2){
+            refView.moved=true;
+        }
+        refView.tx+=dx;
+        refView.ty+=dy;
+        applyRefViewportTransform();
+    });
+
+    window.addEventListener('mouseup',function(){
+        if(!refView.dragging) return;
+        refView.dragging=false;
+        vp.classList.remove('dragging');
+    });
+
+    applyRefViewportTransform();
 }
 
 function redrawRefCanvas(){
@@ -678,9 +812,26 @@ async function saveCalibration(){
             headers:{'Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]').content},
             body:JSON.stringify({calibration:{zoom:calib.zoom,H:calib.H,points:calib.points}})
         });
+        if(!r.ok){
+            const t=await r.text();
+            console.error('Save calibration failed',r.status,t);
+            alert(`Errore salvataggio calibrazione (HTTP ${r.status})`);
+            return;
+        }
         const d=await r.json();
         if(d.success){
             document.getElementById('status').textContent='💾 Calibrazione campo salvata!';
+            setModeIndicator('💾','Calibrazione salvata');
+            // Se sei già in setup, ripristina l'indicazione di setup (evita messaggi "bloccati")
+            if(typeof setupMode!=='undefined' && setupMode){
+                setTimeout(function(){
+                    setModeIndicator('🧭','SETUP BUCA: scegli un elemento e clicca sulla mappetta');
+                },800);
+            }else{
+                setTimeout(function(){
+                    setModeIndicator('🧭','');
+                },1200);
+            }
         }else{
             alert('Errore salvataggio calibrazione');
         }
@@ -788,7 +939,7 @@ function handleMapDigitizeClick(p){
         geom.tee_points=geom.tee_points||{yellow:null,red:null};
         geom.tee_points.yellow={lat:ll.lat,lng:ll.lng};
         renderGeometry();
-        refreshLandingZones();
+        clearLandingLayers();
         document.getElementById('status').textContent='🟡 TEE giallo impostato da mappetta';
         setModeIndicator('🟡','TEE giallo impostato (da mappetta)');
         return;
@@ -797,7 +948,7 @@ function handleMapDigitizeClick(p){
         geom.tee_points=geom.tee_points||{yellow:null,red:null};
         geom.tee_points.red={lat:ll.lat,lng:ll.lng};
         renderGeometry();
-        refreshLandingZones();
+        clearLandingLayers();
         document.getElementById('status').textContent='🔴 TEE rosso impostato da mappetta';
         setModeIndicator('🔴','TEE rosso impostato (da mappetta)');
         return;
@@ -805,7 +956,7 @@ function handleMapDigitizeClick(p){
     if(pointMode==='green'){
         geom.green_point={lat:ll.lat,lng:ll.lng};
         renderGeometry();
-        refreshLandingZones();
+        clearLandingLayers();
         document.getElementById('status').textContent='🟢 GREEN impostato da mappetta';
         setModeIndicator('🟢','GREEN impostato (da mappetta)');
         return;
@@ -888,7 +1039,7 @@ function handleSetupClick(latlng){
         geom.centerline.push({lat:latlng.lat,lng:latlng.lng});
         renderGeometry();
         updateLandingUiState();
-        refreshLandingZones();
+        clearLandingLayers();
         document.getElementById('status').textContent=`📐 Centerline: ${geom.centerline.length} punti (trascina i vertici per aggiustare)`;
         setModeIndicator('📐',`CENTERLINE: ${geom.centerline.length} punti`);
     }
@@ -930,23 +1081,25 @@ function renderGeometry(){
         geomLayers.green.on('dragend',function(){
             const pt=this.getLatLng();
             geom.green_point={lat:pt.lat,lng:pt.lng};
-            refreshLandingZones();
+            clearLandingLayers();
         });
     }
     if(Array.isArray(geom.centerline)&&geom.centerline.length>0){
         const latlngs=geom.centerline.map(p=>[p.lat,p.lng]);
         geomLayers.centerline=L.polyline(latlngs,{color:'#9C27B0',weight:4,opacity:0.9}).addTo(map);
-        geom.centerline.forEach((p,i)=>{
-            const cm=L.marker([p.lat,p.lng],{icon:makeSmallVertexIcon('#9C27B0'),draggable:true}).addTo(map);
-            cm.on('dragend',function(){
-                const pt=this.getLatLng();
-                geom.centerline[i]={lat:pt.lat,lng:pt.lng};
-                renderGeometry();
-                updateLandingUiState();
-                refreshLandingZones();
+        if(setupMode){
+            geom.centerline.forEach((p,i)=>{
+                const cm=L.marker([p.lat,p.lng],{icon:makeSmallVertexIcon('#9C27B0'),draggable:true}).addTo(map);
+                cm.on('dragend',function(){
+                    const pt=this.getLatLng();
+                    geom.centerline[i]={lat:pt.lat,lng:pt.lng};
+                    renderGeometry();
+                    updateLandingUiState();
+                    clearLandingLayers();
+                });
+                geomLayers.centerlinePoints.push(cm);
             });
-            geomLayers.centerlinePoints.push(cm);
-        });
+        }
     }
 
     // Linea riferimento tee→green e label buca (solo come guida; se c'e' gia' una centerline, evitiamo confusione)
@@ -1227,6 +1380,38 @@ function updateLines(){
     document.getElementById('measurements').innerHTML=html;
 }
 
+function loadSavedDrives(){
+    clearDriveLayers();
+    if(!Array.isArray(SAVED_DRIVES)||SAVED_DRIVES.length===0){
+        return;
+    }
+    const sorted=SAVED_DRIVES.slice().sort((a,b)=>{
+        const ai=parseInt(a.id||0,10);
+        const bi=parseInt(b.id||0,10);
+        if(Number.isFinite(ai)&&Number.isFinite(bi)&&ai!==bi) return ai-bi;
+        const at=new Date(a.created_at||0).getTime();
+        const bt=new Date(b.created_at||0).getTime();
+        return at-bt;
+    });
+    const d=sorted[sorted.length-1];
+    const tee=L.latLng(parseFloat(d.tee_lat),parseFloat(d.tee_lng));
+    const shots=Array.isArray(d.shots)?d.shots:[];
+    const points=[tee].concat(shots.map(s=>L.latLng(parseFloat(s.lat),parseFloat(s.lng))));
+
+    const line=L.polyline(points,{color:'#FF9800',weight:3,opacity:0.65,dashArray:'8,8'}).addTo(map);
+    const teeM=L.circleMarker(tee,{radius:6,fillColor:'#FF9800',color:'#fff',weight:2,fillOpacity:0.9}).addTo(map);
+    driveLayers.push(line,teeM);
+
+    drives=[{tee:tee,markers:[teeM],lines:[line],shots:shots}];
+
+    driveComplete=true;
+}
+
+function clearDriveLayers(){
+    driveLayers.forEach(l=>{try{map.removeLayer(l);}catch(e){}});
+    driveLayers=[];
+}
+
 async function completeDrive(){
     if(!currentDrive||!currentDrive.tee||currentDrive.shots.length===0){
         alert('Nessun drive da completare!');
@@ -1251,7 +1436,9 @@ async function completeDrive(){
         });
         const d=await r.json();
         if(d.success){
-            drives.push(currentDrive);
+            // Politica "drive unico" anche in UI: rimuovi eventuale drive precedente dalla mappa e sostituisci
+            drives.forEach(old=>{old.markers.forEach(m=>{try{map.removeLayer(m);}catch(e){}});old.lines.forEach(l=>{try{map.removeLayer(l);}catch(e){}});});
+            drives=[currentDrive];
             currentDrive=null;
 
             document.getElementById('tee-btn').disabled=false;
