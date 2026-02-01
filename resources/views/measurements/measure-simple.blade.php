@@ -385,6 +385,7 @@
         const HOLE_DATA = {
             tee: @json($hole->tee_points['yellow'] ?? null),
             green: @json($hole->green_point),
+            centerline: @json($hole->centerline),
             par: {{ $hole->par ?? 'null' }},
             length: {{ $hole->length_yards ?? 'null' }}
         };
@@ -477,15 +478,29 @@
                 });
             }
 
-            // Linea tee-green
-            updateTeeGreenLine();
+            // Centerline da OSM (se disponibile)
+            if (HOLE_DATA.centerline && HOLE_DATA.centerline.length >= 2) {
+                const centerlineCoords = HOLE_DATA.centerline.map(p => [p.lat, p.lng]);
+                const centerlineLine = L.polyline(centerlineCoords, {
+                    color: '#9C27B0',
+                    weight: 3,
+                    opacity: 0.8
+                }).addTo(map);
+                centerlineLine.bindPopup('Centerline OSM');
 
-            // Fit bounds
-            if (HOLE_DATA.tee && HOLE_DATA.green) {
-                map.fitBounds([
-                    [HOLE_DATA.tee.lat, HOLE_DATA.tee.lng],
-                    [HOLE_DATA.green.lat, HOLE_DATA.green.lng]
-                ], { padding: [50, 50] });
+                // Fit bounds sulla centerline
+                map.fitBounds(centerlineCoords, { padding: [50, 50] });
+            } else {
+                // Linea tee-green semplice
+                updateTeeGreenLine();
+
+                // Fit bounds
+                if (HOLE_DATA.tee && HOLE_DATA.green) {
+                    map.fitBounds([
+                        [HOLE_DATA.tee.lat, HOLE_DATA.tee.lng],
+                        [HOLE_DATA.green.lat, HOLE_DATA.green.lng]
+                    ], { padding: [50, 50] });
+                }
             }
         }
 
@@ -593,38 +608,26 @@
         function addShot() {
             if (!currentDrive) return;
 
-            // Calcola distanza già percorsa
-            let totalMeters = 0;
-            let prev = currentDrive.tee;
-            currentDrive.shots.forEach(shot => {
-                totalMeters += map.distance(L.latLng(prev.lat, prev.lng), L.latLng(shot.lat, shot.lng));
-                prev = shot;
-            });
-
             // Ottieni shot length dal selettore corrente
             const gender = document.getElementById('shot-gender').value;
             const level = document.getElementById('shot-level').value;
             const shotData = SHOT_LENGTH_TABLES[gender][level];
             const numShots = currentDrive.shots.length + 1; // prossimo colpo
 
-            // Calcola distanza target cumulativa per questo colpo
-            let targetTotalYards;
+            // Lunghezza fissa del colpo (non cumulativa)
+            let shotYards;
             if (numShots === 2) {
-                targetTotalYards = shotData.shot2;
+                shotYards = shotData.shot2;  // es. 220 per Mens Scratch
             } else if (numShots === 3 && shotData.shot3) {
-                targetTotalYards = shotData.shot3;
+                shotYards = shotData.shot3;  // es. 170 per Mens Bogey
             } else {
-                // Fallback: aggiungi 150 yards
-                targetTotalYards = Math.round(totalMeters / YD) + 150;
+                // Fallback: usa shot2 o 150 yards
+                shotYards = shotData.shot2 || 150;
             }
-
-            // Distanza da aggiungere = target totale - già percorso
-            const alreadyYards = Math.round(totalMeters / YD);
-            const addYards = Math.max(50, targetTotalYards - alreadyYards); // minimo 50 yards
 
             const lastShot = currentDrive.shots[currentDrive.shots.length - 1] || currentDrive.tee;
             const bearing = HOLE_DATA.green ? getBearing(lastShot, HOLE_DATA.green) : 0;
-            const newShot = destinationPoint(lastShot, addYards * YD, bearing);
+            const newShot = destinationPoint(lastShot, shotYards * YD, bearing);
 
             currentDrive.shots.push(newShot);
             addShotMarker(newShot, currentDrive.shots.length);
@@ -1009,14 +1012,15 @@
         }
 
         // === SHOT LENGTH TABLES (from golf-rating-system) ===
+        // shot1 = drive, shotN = lunghezza singolo colpo N (non cumulativo)
         const SHOT_LENGTH_TABLES = {
             Mens: {
-                Scratch: { shot1: 250, shot2: 470 },
-                Bogey: { shot1: 200, shot2: 370, shot3: 540 }
+                Scratch: { shot1: 250, shot2: 220 },  // 470-250=220
+                Bogey: { shot1: 200, shot2: 170, shot3: 170 }  // 370-200=170, 540-370=170
             },
             Womens: {
-                Scratch: { shot1: 210, shot2: 400 },
-                Bogey: { shot1: 150, shot2: 280, shot3: 410 }
+                Scratch: { shot1: 210, shot2: 190 },  // 400-210=190
+                Bogey: { shot1: 150, shot2: 130, shot3: 130 }  // 280-150=130, 410-280=130
             }
         };
 
@@ -1026,10 +1030,10 @@
             const data = SHOT_LENGTH_TABLES[gender][level];
 
             let html = `<div style="color: #4CAF50; margin-bottom: 5px;"><strong>${gender} ${level}</strong></div>`;
-            html += `<div>1° Colpo: <strong>${data.shot1} yds</strong></div>`;
-            html += `<div>2 Colpi totali: <strong>${data.shot2} yds</strong></div>`;
+            html += `<div>1° Colpo (Drive): <strong>${data.shot1} yds</strong></div>`;
+            html += `<div>2° Colpo: <strong>${data.shot2} yds</strong></div>`;
             if (data.shot3) {
-                html += `<div>3 Colpi totali: <strong>${data.shot3} yds</strong></div>`;
+                html += `<div>3° Colpo: <strong>${data.shot3} yds</strong></div>`;
             }
 
             document.getElementById('shot-length-values').innerHTML = html;

@@ -168,6 +168,7 @@ out skel qt;',
                         'green' => null,
                         'pin' => null,
                         'fairway' => null,
+                        'centerline' => null,
                         'par' => $tags['par'] ?? null,
                     ];
                 }
@@ -182,17 +183,24 @@ out skel qt;',
                         $holes[$holeNum]['green'] = $coords;
                         break;
                     case 'hole':
-                        // Un 'hole' way potrebbe contenere info sulla lunghezza
-                        if (!$holes[$holeNum]['tee'] && isset($el['nodes'][0])) {
-                            $firstNode = $el['nodes'][0];
-                            if (isset($nodes[$firstNode])) {
-                                $holes[$holeNum]['tee'] = $nodes[$firstNode];
+                        // Un 'hole' way contiene la centerline
+                        if ($el['type'] === 'way' && isset($el['nodes'])) {
+                            // Salva la centerline come array di coordinate
+                            $centerline = [];
+                            foreach ($el['nodes'] as $nodeId) {
+                                if (isset($nodes[$nodeId])) {
+                                    $centerline[] = $nodes[$nodeId];
+                                }
                             }
-                        }
-                        if (!$holes[$holeNum]['green'] && isset($el['nodes'])) {
-                            $lastNode = end($el['nodes']);
-                            if (isset($nodes[$lastNode])) {
-                                $holes[$holeNum]['green'] = $nodes[$lastNode];
+                            if (count($centerline) >= 2) {
+                                $holes[$holeNum]['centerline'] = $centerline;
+                                // Primo punto = tee, ultimo = green (se non già impostati)
+                                if (!$holes[$holeNum]['tee']) {
+                                    $holes[$holeNum]['tee'] = $centerline[0];
+                                }
+                                if (!$holes[$holeNum]['green']) {
+                                    $holes[$holeNum]['green'] = end($centerline);
+                                }
                             }
                         }
                         break;

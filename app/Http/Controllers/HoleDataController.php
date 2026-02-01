@@ -63,6 +63,11 @@ class HoleDataController extends Controller
                     $updates['green_point'] = $data['green'];
                 }
 
+                // Aggiorna centerline se disponibile
+                if (!empty($data['centerline'])) {
+                    $updates['centerline'] = $data['centerline'];
+                }
+
                 // Aggiorna par se disponibile
                 if ($data['par'] && !$hole->par) {
                     $updates['par'] = $data['par'];
