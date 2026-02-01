@@ -74,6 +74,17 @@
         .btn-secondary:hover {
             background: #0b7dda;
         }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
         .map-section {
             background: white;
             border-radius: 8px;
@@ -184,6 +195,15 @@
                     <h3>Buche</h3>
                     <p>{{ $course->holes->count() }}</p>
                 </div>
+            </div>
+
+            <div class="header-actions">
+                <a href="{{ route('courses.edit', $course) }}" class="btn btn-secondary">✏️ Modifica</a>
+                <form action="{{ route('courses.destroy', $course) }}" method="POST" style="display: inline;" onsubmit="return confirm('Sei sicuro di voler eliminare questo campo? Questa azione è irreversibile.')">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-danger">🗑️ Elimina Campo</button>
+                </form>
             </div>
         </div>
 
