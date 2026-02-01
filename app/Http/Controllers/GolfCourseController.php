@@ -15,7 +15,7 @@ class GolfCourseController extends Controller
      */
     public function index()
     {
-        $courses = GolfCourse::latest()->get();
+        $courses = GolfCourse::with('holes')->latest()->get();
         return view('courses.index', compact('courses'));
     }
 

@@ -6,8 +6,8 @@
     <title>Campi da Golf</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: Arial, sans-serif; 
+        body {
+            font-family: Arial, sans-serif;
             background: #f5f5f5;
             padding: 20px;
         }
@@ -94,13 +94,13 @@
 <body>
     <div class="container">
         <h1>🏌️ Campi da Golf</h1>
-        
+
         @if(session('success'))
             <div class="alert">{{ session('success') }}</div>
         @endif
-        
+
         <a href="{{ route('courses.create') }}" class="btn">+ Nuovo Campo</a>
-        
+
         @if($courses->count() > 0)
             <div class="courses-grid">
                 @foreach($courses as $course)
@@ -108,13 +108,17 @@
                         <h2>{{ $course->name }}</h2>
                         <p>📍 {{ $course->location }}</p>
                         <p>🗺️ {{ $course->latitude }}, {{ $course->longitude }}</p>
-                        
-                        @if($course->map_image_path)
-                            <p style="color: #4CAF50;">✓ Mappa caricata</p>
+
+                        @php
+                            $mappedHoles = $course->holes->filter(fn($h) => !empty($h->green_point) || !empty($h->tee_points['yellow']))->count();
+                            $totalHoles = $course->holes->count();
+                        @endphp
+                        @if($mappedHoles > 0)
+                            <p style="color: #4CAF50;">📍 {{ $mappedHoles }}/{{ $totalHoles }} buche mappate</p>
                         @else
-                            <p style="color: #f44336;">✗ Mappa non caricata</p>
+                            <p style="color: #f44336;">✗ Buche non mappate</p>
                         @endif
-                        
+
                         <div class="actions">
                             <a href="{{ route('courses.show', $course) }}">Dettagli</a>
                             <a href="{{ route('courses.measure', $course) }}">Misura</a>
