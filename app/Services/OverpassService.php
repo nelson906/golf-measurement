@@ -114,6 +114,7 @@ out skel qt;',
 
     /**
      * Parsa gli elementi OSM e raggruppa per buca
+     * Usa ref + name per distinguere buche in campi con 27/36 buche
      */
     protected function parseGolfElements(array $data): array
     {
@@ -135,7 +136,9 @@ out skel qt;',
 
             if (!$golfType) continue;
 
-            $holeRef = $tags['ref'] ?? $tags['name'] ?? null;
+            // Usa ref per il numero buca, name per identificare il percorso
+            $holeRef = $tags['ref'] ?? null;
+            $holeName = $tags['name'] ?? null;
 
             // Estrai coordinate
             $coords = null;
@@ -148,22 +151,28 @@ out skel qt;',
 
             if (!$coords) continue;
 
-            // Raggruppa per numero buca
-            $holeNum = $this->extractHoleNumber($holeRef);
+            // Raggruppa per numero buca + nome percorso
+            $holeNum = $this->extractHoleNumber($holeRef ?? $holeName);
+            $courseName = $this->extractCourseName($holeName, $holeRef);
 
             if ($holeNum === null) {
                 // Elemento senza numero buca specifico
                 $holes['unassigned'][] = [
                     'type' => $golfType,
                     'ref' => $holeRef,
+                    'name' => $holeName,
                     'lat' => $coords['lat'],
                     'lng' => $coords['lng'],
                     'tags' => $tags,
                 ];
             } else {
-                if (!isset($holes[$holeNum])) {
-                    $holes[$holeNum] = [
+                // Chiave univoca: courseName + holeNum (per campi 27/36 buche)
+                $holeKey = $courseName ? "{$courseName}_{$holeNum}" : $holeNum;
+
+                if (!isset($holes[$holeKey])) {
+                    $holes[$holeKey] = [
                         'hole_number' => $holeNum,
+                        'course_name' => $courseName,
                         'tee' => null,
                         'green' => null,
                         'pin' => null,
@@ -176,11 +185,11 @@ out skel qt;',
                 // Assegna al tipo corretto
                 switch ($golfType) {
                     case 'tee':
-                        $holes[$holeNum]['tee'] = $coords;
+                        $holes[$holeKey]['tee'] = $coords;
                         break;
                     case 'green':
                     case 'pin':
-                        $holes[$holeNum]['green'] = $coords;
+                        $holes[$holeKey]['green'] = $coords;
                         break;
                     case 'hole':
                         // Un 'hole' way contiene la centerline
@@ -193,42 +202,59 @@ out skel qt;',
                                 }
                             }
                             if (count($centerline) >= 2) {
-                                $holes[$holeNum]['centerline'] = $centerline;
+                                $holes[$holeKey]['centerline'] = $centerline;
                                 // Primo punto = tee, ultimo = green (se non già impostati)
-                                if (!$holes[$holeNum]['tee']) {
-                                    $holes[$holeNum]['tee'] = $centerline[0];
+                                if (!$holes[$holeKey]['tee']) {
+                                    $holes[$holeKey]['tee'] = $centerline[0];
                                 }
-                                if (!$holes[$holeNum]['green']) {
-                                    $holes[$holeNum]['green'] = end($centerline);
+                                if (!$holes[$holeKey]['green']) {
+                                    $holes[$holeKey]['green'] = end($centerline);
                                 }
                             }
                         }
                         break;
                     case 'fairway':
-                        $holes[$holeNum]['fairway'] = $coords;
+                        $holes[$holeKey]['fairway'] = $coords;
                         break;
                 }
 
                 // Estrai par se presente
                 if (isset($tags['par'])) {
-                    $holes[$holeNum]['par'] = (int)$tags['par'];
+                    $holes[$holeKey]['par'] = (int)$tags['par'];
                 }
             }
         }
 
-        // Ordina le buche per numero
-        $sortedHoles = [];
-        for ($i = 1; $i <= 18; $i++) {
-            if (isset($holes[$i])) {
-                $sortedHoles[$i] = $holes[$i];
+        // Raggruppa le buche per percorso (course_name)
+        $courseGroups = [];
+        $simpleHoles = []; // Buche senza course_name (campi 18 buche standard)
+
+        foreach ($holes as $key => $hole) {
+            if ($key === 'unassigned') continue;
+
+            $courseName = $hole['course_name'] ?? null;
+            if ($courseName) {
+                if (!isset($courseGroups[$courseName])) {
+                    $courseGroups[$courseName] = [];
+                }
+                $courseGroups[$courseName][$hole['hole_number']] = $hole;
+            } else {
+                $simpleHoles[$hole['hole_number']] = $hole;
             }
+        }
+
+        // Ordina le buche per numero in ogni gruppo
+        ksort($simpleHoles);
+        foreach ($courseGroups as $name => $group) {
+            ksort($courseGroups[$name]);
         }
 
         return [
             'success' => true,
-            'holes' => $sortedHoles,
+            'holes' => $simpleHoles,
+            'courses' => $courseGroups, // Per campi 27/36 buche
             'unassigned' => $holes['unassigned'] ?? [],
-            'total_found' => count($sortedHoles),
+            'total_found' => count($simpleHoles) + array_sum(array_map('count', $courseGroups)),
             'raw_elements' => count($elements),
         ];
     }
@@ -243,8 +269,40 @@ out skel qt;',
         // Cerca un numero nella stringa
         if (preg_match('/(\d+)/', $ref, $matches)) {
             $num = (int)$matches[1];
+            // Supporta buche 1-18 per ogni percorso (anche campi 27/36 buche hanno max 18 per percorso)
             if ($num >= 1 && $num <= 18) {
                 return $num;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Estrae il nome del percorso da name/ref per campi con 27/36 buche
+     * Es: "Blue Course Hole 5", "Red 3", "Percorso Giallo - Buca 7"
+     */
+    protected function extractCourseName(?string $name, ?string $ref): ?string
+    {
+        // Prima prova con name
+        if ($name) {
+            // Pattern comuni: "Blue Course Hole 5", "Red 3", "Percorso Giallo - Buca 7"
+            // Rimuovi numeri e parole comuni per estrarre il nome del percorso
+            $courseName = preg_replace('/\b(hole|buca|buche|\d+)\b/i', '', $name);
+            $courseName = preg_replace('/[-–—:,\.]+/', ' ', $courseName);
+            $courseName = trim(preg_replace('/\s+/', ' ', $courseName));
+
+            if (!empty($courseName) && strlen($courseName) > 1) {
+                return $courseName;
+            }
+        }
+
+        // Prova con ref se contiene lettere (es: "A5", "B3", "Blue-7")
+        if ($ref && preg_match('/([A-Za-z]+)/', $ref, $matches)) {
+            $prefix = $matches[1];
+            // Solo se è più di una lettera o è una lettera significativa
+            if (strlen($prefix) > 1 || in_array(strtoupper($prefix), ['A', 'B', 'C', 'R', 'G', 'Y'])) {
+                return ucfirst(strtolower($prefix));
             }
         }
 
