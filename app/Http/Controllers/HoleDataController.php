@@ -43,9 +43,40 @@ class HoleDataController extends Controller
         }
 
         $updated = 0;
-        $holes = $result['holes'];
 
-        foreach ($holes as $holeNum => $data) {
+        // Raccogli tutte le buche da entrambe le fonti
+        $allHoles = $result['holes'] ?? [];
+
+        // Per campi 27/36 buche: unisci i dati da 'courses'
+        // Usa il primo percorso trovato o quello che corrisponde al nome del campo
+        $courses = $result['courses'] ?? [];
+        if (!empty($courses)) {
+            // Se ci sono più percorsi, cerca quello che corrisponde al nome del campo
+            $courseName = $course->name ?? '';
+            $selectedCourse = null;
+
+            foreach ($courses as $name => $courseHoles) {
+                // Cerca corrispondenza nel nome
+                if (stripos($courseName, $name) !== false || stripos($name, $courseName) !== false) {
+                    $selectedCourse = $courseHoles;
+                    break;
+                }
+            }
+
+            // Se non trovato, usa il primo percorso disponibile
+            if (!$selectedCourse) {
+                $selectedCourse = reset($courses);
+            }
+
+            // Unisci con allHoles (le buche del percorso selezionato hanno priorità)
+            if ($selectedCourse) {
+                foreach ($selectedCourse as $holeNum => $data) {
+                    $allHoles[$holeNum] = $data;
+                }
+            }
+        }
+
+        foreach ($allHoles as $holeNum => $data) {
             $hole = $course->holes()->where('hole_number', $holeNum)->first();
 
             if ($hole) {
@@ -85,7 +116,8 @@ class HoleDataController extends Controller
             'message' => "Caricati dati per {$updated} buche da OpenStreetMap",
             'total_found' => $result['total_found'],
             'updated' => $updated,
-            'holes' => $holes,
+            'holes' => $allHoles,
+            'courses' => $courses,
             'unassigned' => $result['unassigned'] ?? [],
         ]);
     }
